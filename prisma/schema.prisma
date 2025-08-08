@@ -10,64 +10,124 @@ generator client {
   previewFeatures = ["postgresqlExtensions"]
 }
 
-//-------------------------------------------------------------
-// ENUMS
-//-------------------------------------------------------------
-enum Role                 {
+/* ----------------------  ENUMS ---------------------- */
+enum Role {
   USER
   ADMIN
-  }
-
-//-------------------------------------------------------------
-// USERS
-//-------------------------------------------------------------
-model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  phone         String?  @unique
-  password      String   
-
-  // Removed the single 'role' field
-  roles         UserRole[] // A user can have multiple roles
-  lastUsedRole  Role?      @map("last_used_role") // Tracks the last role used by the user
-  refreshTokens RefreshToken[] // Relation to refresh tokens
-
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("users") // Mapea el nombre de la tabla a snake_case
 }
 
-//-------------------------------------------------------------
-// USER ROLES (New Join Table)
-//-------------------------------------------------------------
+enum Channel {
+  EMAIL
+  SYSTEM
+}
+
+enum NotificationType {
+  INSTANT
+  BATCH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  ERROR
+}
+
+/* ----------------------  USERS ---------------------- */
+model User {
+  id            Int                    @id @default(autoincrement())
+  email         String                 @unique
+  phone         String?                @unique
+  password      String
+
+  roles         UserRole[]
+  lastUsedRole  Role?                  @map("last_used_role")
+  refreshTokens RefreshToken[]
+  systemNotifications SystemNotification[]  // ← relación inversa añadida
+
+  createdAt     DateTime               @default(now())  @map("created_at")
+  updatedAt     DateTime               @updatedAt       @map("updated_at")
+  deletedAt     DateTime?                               @map("deleted_at")
+
+  @@map("users")
+}
+
+/* ------------------  USER ROLES --------------------- */
 model UserRole {
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
   user      User     @relation(fields: [userId], references: [id])
   role      Role
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now())            @map("created_at")
+  deletedAt DateTime?                           @map("deleted_at")
 
-  @@unique([userId, role]) // Ensures a user can't have the same role twice
+  @@unique([userId, role])
   @@index([userId])
   @@map("user_roles")
 }
 
-//-------------------------------------------------------------
-// REFRESH TOKENS
-//-------------------------------------------------------------
+/* ----------------  REFRESH TOKENS ------------------- */
 model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime @default(now()) @map("created_at")
+  id         Int      @id @default(autoincrement())
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())           @map("created_at")
+  deletedAt  DateTime?                          @map("deleted_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId Int    @map("user_id")
 
   @@index([userId])
-  @@index([token])
+  @@index([tokenHash])
   @@map("refresh_tokens")
+}
+
+/* --------------  NOTIFICATIONS CORE ---------------- */
+model Notification {
+  id          Int                 @id @default(autoincrement())
+  batchKey    String?             @db.VarChar(120)
+  eventName   String
+  channel     Channel
+  type        NotificationType    @default(INSTANT)
+  status      NotificationStatus  @default(PENDING)
+  errorMsg    String?             @db.Text
+  deletedAt   DateTime?                               @map("deleted_at")
+  createdAt   DateTime            @default(now())    @map("created_at")
+  processedAt DateTime?
+
+  email       EmailNotification?
+  system      SystemNotification?
+
+  @@index([status, channel])
+}
+
+/* --------------  EMAIL NOTIFICATIONS --------------- */
+model EmailNotification {
+  id             Int          @id @default(autoincrement())
+  to             String
+  subject        String
+  body           String
+  meta           Json?
+  providerUsed   String
+  providerMsgId  String?
+  deletedAt      DateTime?                        @map("deleted_at")
+
+  notification   Notification  @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notificationId Int           @unique            // ← único para 1-a-1
+}
+
+/* --------------  SYSTEM NOTIFICATIONS -------------- */
+model SystemNotification {
+  id             Int          @id @default(autoincrement())
+  content        String
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+  deletedAt      DateTime?                        @map("deleted_at")
+
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notificationId Int          @unique            // ← único para 1-a-1
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         Int
 }
