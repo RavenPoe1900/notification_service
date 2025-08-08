@@ -1,8 +1,9 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { Role, UserRole } from '@prisma/client';
 import { IsEnum, IsInt, IsNotEmpty } from 'class-validator';
-import { UserRole, Role } from '@prisma/client';
 
-type UserRoleWithoutId = Omit<UserRole, 'id' | 'createdAt'>;
+
+type UserRoleWithoutId = Omit<UserRole, 'id' | 'createdAt' | 'deletedAt'>;
 
 export class UserRoleDto implements UserRoleWithoutId {
   @ApiProperty({ description: 'ID del usuario', example: 1 })
@@ -12,8 +13,8 @@ export class UserRoleDto implements UserRoleWithoutId {
 
   @ApiProperty({
     description: 'Rol asignado al usuario',
-    enum: Role,
-    example: Role.ADMIN,
+    enum: Object.values(Role),
+    example: 'ADMIN',
   })
   @IsNotEmpty({ message: 'El rol es obligatorio' })
   @IsEnum(Role, { message: 'El rol debe ser un valor válido del enum Role' })

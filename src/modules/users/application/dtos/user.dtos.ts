@@ -14,13 +14,13 @@ import {
 type UserWithoutId = Omit<
   User,
   | 'id'
-  | 'averageRatingAsShipper'
-  | 'totalRatingsAsShipper'
-  | 'averageRatingAsCarrier'
-  | 'totalRatingsAsCarrier'
   | 'createdAt'
   | 'updatedAt'
+  | 'deletedAt'
   | 'lastUsedRole'
+  | 'roles'
+  | 'refreshTokens'
+  | 'systemNotifications'
 >;
 
 export class UserDto implements UserWithoutId {
@@ -79,15 +79,15 @@ export class UserDto implements UserWithoutId {
   phone: string;
 
   /**
-   * @example SHIPPER
+   * @example USER
    * @description The role assigned to the user.
    */
   @IsNotEmpty({ message: 'Role is required' })
   @IsEnum(Role, { message: 'Role must be a valid enum value' })
   @ApiProperty({
     description: 'The role assigned to the user',
-    enum: Role, // This tells Swagger that it's an enum
-    example: Role.USER, // An example value from the enum
+    enum: Object.values(Role), // This tells Swagger that it's an enum
+    example: 'USER', // An example value from the enum
     required: true,
   })
   role: Role;

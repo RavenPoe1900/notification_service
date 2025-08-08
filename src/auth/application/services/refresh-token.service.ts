@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
-import { RefreshToken } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 
 @Injectable()
 export class RefreshTokenService {
@@ -11,19 +10,22 @@ export class RefreshTokenService {
    * Creates a new refresh token for a user
    * @param userId The user ID
    * @param expiresIn Expiration time in seconds
-   * @returns The created refresh token
+   * @returns The created refresh token with the plain token
    */
-  async createRefreshToken(userId: number, expiresIn: number): Promise<RefreshToken> {
-    const token = this.generateRefreshToken();
+  async createRefreshToken(userId: number, expiresIn: number): Promise<{ token: string; tokenRecord: any }> {
+    const plainToken = this.generateRefreshToken();
+    const tokenHash = this.hashToken(plainToken);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-    return this.prisma.refreshToken.create({
+    const tokenRecord = await this.prisma.refreshToken.create({
       data: {
-        token,
+        tokenHash,
         userId,
         expiresAt,
       },
     });
+
+    return { token: plainToken, tokenRecord };
   }
 
   /**
@@ -31,9 +33,10 @@ export class RefreshTokenService {
    * @param token The refresh token string
    * @returns The refresh token with user data or null
    */
-  async findRefreshToken(token: string): Promise<RefreshToken | null> {
+  async findRefreshToken(token: string): Promise<any | null> {
+    const tokenHash = this.hashToken(token);
     return this.prisma.refreshToken.findUnique({
-      where: { token },
+      where: { tokenHash },
       include: { user: true },
     });
   }
@@ -43,8 +46,9 @@ export class RefreshTokenService {
    * @param token The refresh token to revoke
    */
   async revokeRefreshToken(token: string): Promise<void> {
+    const tokenHash = this.hashToken(token);
     await this.prisma.refreshToken.update({
-      where: { token },
+      where: { tokenHash },
       data: { revokedAt: new Date() },
     });
   }
@@ -68,7 +72,7 @@ export class RefreshTokenService {
    * @param refreshToken The refresh token to validate
    * @returns True if valid, false otherwise
    */
-  async isTokenValid(refreshToken: RefreshToken): Promise<boolean> {
+  async isTokenValid(refreshToken: any): Promise<boolean> {
     return (
       refreshToken.revokedAt === null &&
       refreshToken.expiresAt > new Date()
@@ -94,5 +98,14 @@ export class RefreshTokenService {
    */
   private generateRefreshToken(): string {
     return randomBytes(64).toString('hex');
+  }
+
+  /**
+   * Hashes a token for storage
+   * @param token The plain token to hash
+   * @returns The hashed token
+   */
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 } 

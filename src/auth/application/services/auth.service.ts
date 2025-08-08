@@ -61,7 +61,7 @@ export class AuthService implements AuthServicePort {
     
     // Create refresh token
     const refreshTokenExpiresIn = this.configService.get<number>('JWT_REFRESH_EXPIRES_IN', 604800); // 7 days
-    const refreshToken = await this.refreshTokenService.createRefreshToken(
+    const { token: refreshToken } = await this.refreshTokenService.createRefreshToken(
       user.id,
       refreshTokenExpiresIn,
     );
@@ -70,7 +70,7 @@ export class AuthService implements AuthServicePort {
 
     return {
       access_token: accessToken,
-      refresh_token: refreshToken.token,
+      refresh_token: refreshToken,
       expires_in: accessTokenExpiresIn,
     };
   }
@@ -94,7 +94,7 @@ export class AuthService implements AuthServicePort {
     const accessToken = await this.jwtService.signAsync(payload);
     
     const refreshTokenExpiresIn = this.configService.get<number>('JWT_REFRESH_EXPIRES_IN', 604800);
-    const refreshToken = await this.refreshTokenService.createRefreshToken(
+    const { token: refreshToken } = await this.refreshTokenService.createRefreshToken(
       user.id,
       refreshTokenExpiresIn,
     );
@@ -103,7 +103,7 @@ export class AuthService implements AuthServicePort {
 
     return {
       access_token: accessToken,
-      refresh_token: refreshToken.token,
+      refresh_token: refreshToken,
       expires_in: accessTokenExpiresIn,
     };
   }
@@ -129,7 +129,7 @@ export class AuthService implements AuthServicePort {
     const accessToken = await this.jwtService.signAsync(payload);
     
     const refreshTokenExpiresIn = this.configService.get<number>('JWT_REFRESH_EXPIRES_IN', 604800);
-    const newRefreshToken = await this.refreshTokenService.createRefreshToken(
+    const { token: newRefreshToken } = await this.refreshTokenService.createRefreshToken(
       tokenRecord.userId,
       refreshTokenExpiresIn,
     );
@@ -138,7 +138,7 @@ export class AuthService implements AuthServicePort {
 
     return {
       access_token: accessToken,
-      refresh_token: newRefreshToken.token,
+      refresh_token: newRefreshToken,
       expires_in: accessTokenExpiresIn,
     };
   }
