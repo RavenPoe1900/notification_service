@@ -9,25 +9,25 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
 
-  // Middlewares de seguridad
+  // Security middlewares
   app.use(helmet());
   app.use(rateLimitMiddleware);
 
   app.useGlobalPipes(
     new ValidationPipe({
-      transform: true, // <--- ¡Esto es CRÍTICO!
-      whitelist: true, // Opcional: remueve propiedades no definidas en el DTO
-      forbidNonWhitelisted: true, // Opcional: lanza error si hay propiedades no definidas
+      transform: true, // <--- This is CRITICAL!
+              whitelist: true, // Optional: removes undefined properties in the DTO
+        forbidNonWhitelisted: true, // Optional: throws error if there are undefined properties
     }),
   );
 
-  // Habilitar CORS de forma controlada
+  // Enable CORS in a controlled manner
   app.enableCors();
 
-  // Inicializar Swagger solo en entornos no productivos para evitar exposición accidental en producción
+  // Initialize Swagger only in non-production environments to avoid accidental exposure in production
   setupSwagger(app);
 
-  // Puerto de la aplicación
+  // Application port
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

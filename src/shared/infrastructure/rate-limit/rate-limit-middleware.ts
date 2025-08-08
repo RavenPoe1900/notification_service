@@ -16,17 +16,17 @@ import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
  * para la administración y monitoreo de la API.
  */
 export const rateLimitMiddleware: RateLimitRequestHandler = rateLimit({
-  // Define el periodo de tiempo para el límite de peticiones (15 minutos)
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  // Número máximo de peticiones permitidas por IP dentro del windowMs
+  // Define the time period for the request limit (15 minutes)
+      windowMs: 15 * 60 * 1000, // 15 minutes
+  // Maximum number of requests allowed per IP within windowMs
   max: 100,
-  // Devuelve información de rate limit en cabeceras estándar
+  // Returns rate limit information in standard headers
   standardHeaders: true,
-  // Desactiva las cabeceras legacy
+  // Disables legacy headers
   legacyHeaders: false,
-  // Mensaje personalizado enviado cuando se excede el límite
+  // Custom message sent when the limit is exceeded
   message: 'Too many requests, please try again later.',
-  // Manejador para peticiones que exceden el límite de solicitudes
+  // Handler for requests that exceed the request limit
   handler: (_req, res) => {
     res.status(429).json({
       statusCode: 429,
@@ -35,10 +35,10 @@ export const rateLimitMiddleware: RateLimitRequestHandler = rateLimit({
         'You have exceeded the allowed request limit. Please try again later.',
     });
   },
-  // Permite personalizar la clave de rate limit para evaluar la IP del usuario
+  // Allows customizing the rate limit key to evaluate the user's IP
   keyGenerator: (req) => {
     return req.ip;
   },
-  // No se salta el conteo de peticiones exitosas; cada petición cuenta para el límite
+  // Successful requests are not skipped; each request counts towards the limit
   skipSuccessfulRequests: false,
 });

@@ -18,12 +18,12 @@ export const userArgsWithoutPassword =
     select: userSelectWithoutPassword,
   });
 
-/* Alias tipado que siempre reflejará el SELECT */
+/* Typed alias that will always reflect the SELECT */
 export type UserPrismaPayload = Prisma.UserGetPayload<
   typeof userArgsWithoutPassword
 >;
 
-/* --- Tipos planos para relaciones --- */
+/* --- Plain types for relations --- */
 type UserRolePayload = { role: Role };
 
 @Injectable()
@@ -34,20 +34,20 @@ export class PrismaUserToDtoProfile extends AutomapperProfile {
 
   override get profile() {
     return (mapper: Mapper) => {
-      /* ───── Sub-mapas (relaciones) ───── */
+      /* ───── Sub-maps (relations) ───── */
       createMap<UserRolePayload, UserRoleDetailDto>(
         mapper,
         'UserRole',
         UserRoleDetailDto,
       );      
 
-      /* ───── Mapa principal Prisma → DTO ───── */
+      /* ───── Main map Prisma → DTO ───── */
       createMap<UserPrismaPayload, UserResponseDto>(
         mapper,
         'User',
         UserResponseDto,
 
-        // (opcional) ignorar password si alguna vez se incluyera
+        // (optional) ignore password if it were ever included
         forMember(() => (({}) as any).password, ignore()),
 
         forMember(

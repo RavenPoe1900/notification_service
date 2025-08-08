@@ -28,7 +28,7 @@ import { CacheModule } from './shared/infrastructure/cache/cache.module';
     PassportModule,
     HealthModule,
     CacheModule,
-    // Módulos agrupados
+    // Grouped modules
     ...MODULES,
   ],
   controllers: [],
