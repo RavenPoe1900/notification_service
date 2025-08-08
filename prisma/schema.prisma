@@ -1,0 +1,98 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  binaryTargets   = "native"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+//-------------------------------------------------------------
+// ENUMS
+//-------------------------------------------------------------
+enum Role                 {
+  SHIPPER
+  CARRIER
+  ADMIN
+  DISPATCHER
+  }
+enum TripStatus           {
+  CREATED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  }
+enum CancellationReasonShipper {
+  NO_CARRIER_FOUND
+  CHANGED_MIND
+  WRONG_ADDRESS
+  OTHER
+  }
+enum CancellationReasonCarrier {
+  NO_SHOW_SHIPPER
+  TECHNICAL_ISSUE
+  TRAFFIC_ISSUE
+  OTHER
+  }
+enum CancellationReasonAdmin   {
+  FRAUD
+  SYSTEM_ERROR
+  POLICY_VIOLATION
+  OTHER
+  }
+enum TransactionType      {
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+  }
+
+// --- NUEVOS ENUMS ---
+enum VehicleStatus  {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+enum VehicleType    {
+  BIKE
+  CAR
+  VAN
+  TRUCK
+  OTHER
+  }
+
+//-------------------------------------------------------------
+// USERS
+//-------------------------------------------------------------
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  phone         String?  @unique
+  password      String   
+  // Removed the single 'role' field
+  roles         UserRole[] // A user can have multiple roles
+  lastUsedRole  Role?      @map("last_used_role") // Tracks the last role used by the user
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users") // Mapea el nombre de la tabla a snake_case
+}
+
+//-------------------------------------------------------------
+// USER ROLES (New Join Table)
+//-------------------------------------------------------------
+model UserRole {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, role]) // Ensures a user can't have the same role twice
+  @@index([userId])
+  @@map("user_roles")
+}
+
