@@ -9,11 +9,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserDto } from 'src/modules/users/application/dtos/user.dtos';
-
-enum newRole {
-  SHIPPER = 'SHIPPER',
-  CARRIER = 'CARRIER',
-}
+import { Role } from '@prisma/client';
 
 /**
  * @description
@@ -83,8 +79,8 @@ export class SignUpDto implements UserContract {
   @ApiProperty({
     description: 'User role. Allowed values: SHIPPER, CARRIER',
     example: 'SHIPPER',
-    enum: newRole,
+    enum: Role,
     required: true,
   })
-  readonly role?: newRole;
+  readonly role?: Role;
 }

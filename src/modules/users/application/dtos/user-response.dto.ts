@@ -2,10 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNumber, IsEmail, IsOptional, IsString, IsEnum, IsArray } from 'class-validator';
 import { UserRoleDetailDto } from './user-role-detail.dto';
 import { Role } from '@prisma/client';
-import { TripSummaryDto } from './trip-summary.dto';
-import { VehicleSummaryDto } from './vehicle-summary.dto';
-import { CarrierAccountSummaryDto } from './carrier-account-summary.dto';
-import { RatingDetailDto } from './rating-detail.dto';
 
 export class UserResponseDto {
   @ApiProperty({
@@ -43,40 +39,11 @@ export class UserResponseDto {
     enum: Role,
     description: 'The last role the user actively used.',
     nullable: true,
-    example: Role.SHIPPER,
+    example: Role.USER,
   })
   @IsOptional()
   @IsEnum(Role)
   lastUsedRole?: Role;
-
-  @ApiProperty({
-    type: [TripSummaryDto],
-    description: 'A list of trips where the user acted as a shipper.',
-  })
-  @IsArray()
-  tripsAsShipper: TripSummaryDto[];
-
-  @ApiProperty({
-    type: [TripSummaryDto],
-    description: 'A list of trips where the user acted as a carrier.',
-  })
-  @IsArray()
-  tripsAsCarrier: TripSummaryDto[];
-
-  @ApiProperty({
-    type: [VehicleSummaryDto],
-    description:
-      'A list of vehicles associated with the user (if they are a carrier).',
-  })
-  @IsArray()
-  vehicles: VehicleSummaryDto[];
-
-  @ApiProperty({
-    type: CarrierAccountSummaryDto,
-    description: 'Summary of the carrier account associated with the user.',
-    nullable: true,
-  })
-  carrierAccount?: CarrierAccountSummaryDto;
 
   @ApiProperty({
     description:
@@ -113,20 +80,6 @@ export class UserResponseDto {
   })
   @IsNumber()
   totalRatingsAsCarrier: number;
-
-  @ApiProperty({
-    type: [RatingDetailDto],
-    description: 'A list of ratings given by this user to others.',
-  })
-  @IsArray()
-  ratingsGiven: RatingDetailDto[];
-
-  @ApiProperty({
-    type: [RatingDetailDto],
-    description: 'A list of ratings received by this user from others.',
-  })
-  @IsArray()
-  ratingsReceived: RatingDetailDto[];
 
   @ApiProperty({
     description: 'The timestamp when the user account was created.',

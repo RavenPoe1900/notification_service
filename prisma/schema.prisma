@@ -1,6 +1,7 @@
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
+  extensions = [postgis()]
 }
 
 generator client {
@@ -13,54 +14,8 @@ generator client {
 // ENUMS
 //-------------------------------------------------------------
 enum Role                 {
-  SHIPPER
-  CARRIER
+  USER
   ADMIN
-  DISPATCHER
-  }
-enum TripStatus           {
-  CREATED
-  ACCEPTED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-  }
-enum CancellationReasonShipper {
-  NO_CARRIER_FOUND
-  CHANGED_MIND
-  WRONG_ADDRESS
-  OTHER
-  }
-enum CancellationReasonCarrier {
-  NO_SHOW_SHIPPER
-  TECHNICAL_ISSUE
-  TRAFFIC_ISSUE
-  OTHER
-  }
-enum CancellationReasonAdmin   {
-  FRAUD
-  SYSTEM_ERROR
-  POLICY_VIOLATION
-  OTHER
-  }
-enum TransactionType      {
-  CREDIT
-  DEBIT
-  ADJUSTMENT
-  }
-
-// --- NUEVOS ENUMS ---
-enum VehicleStatus  {
-  ACTIVE
-  INACTIVE
-  MAINTENANCE
-}
-enum VehicleType    {
-  BIKE
-  CAR
-  VAN
-  TRUCK
-  OTHER
   }
 
 //-------------------------------------------------------------
@@ -71,9 +26,12 @@ model User {
   email         String   @unique
   phone         String?  @unique
   password      String   
+
   // Removed the single 'role' field
   roles         UserRole[] // A user can have multiple roles
   lastUsedRole  Role?      @map("last_used_role") // Tracks the last role used by the user
+  refreshTokens RefreshToken[] // Relation to refresh tokens
+
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -96,3 +54,20 @@ model UserRole {
   @@map("user_roles")
 }
 
+//-------------------------------------------------------------
+// REFRESH TOKENS
+//-------------------------------------------------------------
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int    @map("user_id")
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}

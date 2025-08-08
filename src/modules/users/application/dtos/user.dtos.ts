@@ -87,7 +87,7 @@ export class UserDto implements UserWithoutId {
   @ApiProperty({
     description: 'The role assigned to the user',
     enum: Role, // This tells Swagger that it's an enum
-    example: Role.SHIPPER, // An example value from the enum
+    example: Role.USER, // An example value from the enum
     required: true,
   })
   role: Role;

@@ -1,6 +1,7 @@
 import { LoginDto } from '../dtos/login.dto';
 import { LoginResponseDto } from '../dtos/login-response.dto';
 import { SignUpDto } from '../dtos/sign-up.dto';
+import { RefreshTokenDto } from '../dtos/refresh-token.dto';
 import { Role } from '@prisma/client';
 
 /**
@@ -21,9 +22,24 @@ export interface AuthServicePort {
   /**
    * Registers a new user in the system.
    * @param signUpDto DTO containing the user's registration information.
-   * @returns A promise that resolves when the user has been registered.
+   * @returns A promise that resolves with the access token and refresh token.
    */
-  signUp(signUpDto: SignUpDto): Promise<void>;
+  signUp(signUpDto: SignUpDto): Promise<LoginResponseDto>;
+
+  /**
+   * Refreshes the access token using a refresh token.
+   * @param refreshTokenDto DTO containing the refresh token.
+   * @returns A promise that resolves with new access and refresh tokens.
+   * @throws UnauthorizedException if the refresh token is invalid or expired.
+   */
+  refreshToken(refreshTokenDto: RefreshTokenDto): Promise<LoginResponseDto>;
+
+  /**
+   * Logs out a user by revoking all their refresh tokens.
+   * @param userId The ID of the user to logout.
+   * @returns A promise that resolves when the logout is complete.
+   */
+  logout(userId: number): Promise<void>;
 
   /**
    * Changes the role of an existing user.
