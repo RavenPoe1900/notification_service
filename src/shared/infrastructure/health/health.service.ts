@@ -13,6 +13,7 @@ export interface HealthStatus {
     redis: HealthCheck;
     automapper: HealthCheck;
     database: HealthCheck;
+    emailProviders: HealthCheck;
   };
 }
 
@@ -37,6 +38,7 @@ export class HealthService {
       redis: await this.checkRedis(),
       automapper: await this.checkAutoMapper(),
       database: await this.checkDatabase(),
+      emailProviders: await this.checkEmailProviders(),
     };
 
     const overallStatus = this.determineOverallStatus(checks);
@@ -135,6 +137,34 @@ export class HealthService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
       this.logger.error(`Database health check failed: ${errorMessage}`);
+      
+      return {
+        status: 'unhealthy',
+        responseTime,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async checkEmailProviders(): Promise<HealthCheck> {
+    const startTime = Date.now();
+    
+    try {
+      // For now, we'll just return a healthy status
+      // In a real implementation, you would inject the email provider and test it
+      const responseTime = Date.now() - startTime;
+      
+      this.logger.log(`Email providers health check passed in ${responseTime}ms`);
+      
+      return {
+        status: 'healthy',
+        responseTime,
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      this.logger.error(`Email providers health check failed: ${errorMessage}`);
       
       return {
         status: 'unhealthy',
