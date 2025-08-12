@@ -41,7 +41,7 @@ export class AuthService implements AuthServicePort {
     try {
       user = await this.usersService.findOne(findUser);
     } catch (e: unknown) {
-      if (e instanceof Error && e.message === 'Entity not found') {
+      if (e instanceof Error && (e.message === 'Entity not found' || e.message === 'Item not found') ) {
         throw new UnauthorizedException('Invalid credentials');
       }
       throw e;
@@ -76,7 +76,7 @@ export class AuthService implements AuthServicePort {
   }
 
   async signUp(signUpDto: SignUpDto): Promise<LoginResponseDto> {
-    const role: Role = signUpDto.role ?? Role.USER;
+    const role: Role = Role.USER;
 
     const data = {
       data: {

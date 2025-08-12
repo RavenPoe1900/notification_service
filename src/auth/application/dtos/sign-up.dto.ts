@@ -1,7 +1,6 @@
 import {
   IsEmail,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -9,7 +8,6 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserDto } from 'src/modules/users/application/dtos/user.dtos';
-import { Role } from '@prisma/client';
 
 /**
  * @description
@@ -70,17 +68,4 @@ export class SignUpDto implements UserContract {
     example: 'P@ssw0rd!',
   })
   readonly password: string;
-
-  /**
-   * @example SHIPPER
-   * @description The role of the user logging in. Only allowed values are: SHIPPER or CARRIER.
-   */
-  @IsOptional()
-  @ApiProperty({
-    description: 'User role. Allowed values: SHIPPER, CARRIER',
-    example: 'SHIPPER',
-    enum: Role,
-    required: true,
-  })
-  readonly role?: Role;
 }
