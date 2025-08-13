@@ -8,7 +8,7 @@ import { rateLimitMiddleware } from './shared/infrastructure/rate-limit/rate-lim
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
-
+  
   // Security middlewares
   app.use(helmet());
   app.use(rateLimitMiddleware);

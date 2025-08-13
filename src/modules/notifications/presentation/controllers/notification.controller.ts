@@ -10,12 +10,21 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationService } from '../../application/services/notification.service';
 import { CreateNotificationDto } from '../../application/dtos/create-notification.dto';
 import { NotificationResponseDto, SystemNotificationResponseDto } from '../../application/dtos/notification-response.dto';
 import { RequestWithUser } from 'src/shared/domain/interfaces/request-id.interface';
+import { OperationResult } from 'src/shared/domain/interfaces/operation-result.interface';
+import { ApiResponseSwagger } from 'src/shared/infrastructure/swagger/response.swagger';
+import { createSwagger, deleteSwagger, findSwagger, updateSwagger } from 'src/shared/infrastructure/swagger/http.swagger';
+import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
 
+/**
+ * Controller for managing notifications.
+ * Provides endpoints to create, retrieve, update, and delete notifications,
+ * as well as manage notification queues.
+ */
 @ApiTags('Notifications')
 @Controller('notifications')
 @ApiBearerAuth('access-token')
@@ -24,15 +33,8 @@ export class NotificationController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiResponse({
-    status: 201,
-    description: 'Notification created successfully',
-    type: NotificationResponseDto,
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid notification data',
-  })
+  @ApiOperation({ summary: 'Create a new notification' })
+  @ApiResponseSwagger(createSwagger(NotificationResponseDto, 'Notifications'))
   async createNotification(
     @Body() createDto: CreateNotificationDto,
   ): Promise<NotificationResponseDto> {
@@ -41,11 +43,8 @@ export class NotificationController {
 
   @Get('system')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({
-    status: 200,
-    description: 'System notifications retrieved successfully',
-    type: [SystemNotificationResponseDto],
-  })
+  @ApiOperation({ summary: 'Retrieve system notifications for a user' })
+  @ApiResponseSwagger(findSwagger(SystemNotificationResponseDto, 'Notifications'))
   async getSystemNotifications(
     @Request() req: RequestWithUser,
   ): Promise<SystemNotificationResponseDto[]> {
@@ -54,15 +53,8 @@ export class NotificationController {
 
   @Patch('system/:id/read')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({
-    status: 200,
-    description: 'Notification marked as read successfully',
-    type: SystemNotificationResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
+  @ApiOperation({ summary: 'Mark a system notification as read' })
+  @ApiResponseSwagger(updateSwagger(SystemNotificationResponseDto, 'Notifications'))
   async markAsRead(
     @Param('id') id: string,
   ): Promise<SystemNotificationResponseDto> {
@@ -71,15 +63,41 @@ export class NotificationController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiResponse({
-    status: 204,
-    description: 'Notification deleted successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  async deleteNotification(@Param('id') id: string): Promise<void> {
-    await this.notificationService.deleteNotification(parseInt(id));
+  @ApiOperation({ summary: 'Delete a notification' })
+  @ApiResponseSwagger(deleteSwagger(SystemNotificationResponseDto, 'Notifications'))
+  async deleteNotification(@Param('id') id: string): Promise<OperationResult> {
+    return this.notificationService.deleteNotification(parseInt(id));
   }
-} 
+
+  @Get('queue/stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retrieve queue statistics' })
+  @ApiResponseSwagger(findSwagger(OperationResultDto, 'Notifications'))
+  async getQueueStats() {
+    return this.notificationService.getQueueStats();
+  }
+
+  @Post('queue/clean')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clean the notification queue' })
+  @ApiResponseSwagger(updateSwagger(OperationResultDto, 'Notifications'))
+  async cleanQueue(): Promise<OperationResult> {
+    return this.notificationService.cleanQueue();
+  }
+
+  @Post('queue/pause')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Pause the notification queue' })
+  @ApiResponseSwagger(updateSwagger(OperationResultDto, 'Notifications'))
+  async pauseQueue(): Promise<OperationResult> {
+    return this.notificationService.pauseQueue();
+  }
+
+  @Post('queue/resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resume the notification queue' })
+  @ApiResponseSwagger(updateSwagger(OperationResultDto, 'Notifications'))
+  async resumeQueue(): Promise<OperationResult> {
+    return this.notificationService.resumeQueue();
+  }
+}

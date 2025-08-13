@@ -1,4 +1,4 @@
-import { NotificationPrismaPayload, SystemNotificationPrismaPayload } from '../../infrastructure/mappers/prisma-notification.profile';
+import { NotificationPrismaPayload, SystemNotificationPrismaPayload } from "../../infrastructure/mappers/types/notification.prisma-types";
 
 export interface NotificationRepository {
   create(notification: CreateNotificationData): Promise<NotificationPrismaPayload>;

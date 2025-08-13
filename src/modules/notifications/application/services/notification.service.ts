@@ -1,11 +1,12 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { NotificationRepository } from '../../domain/interfaces/notification-repository.interface';
-import { EmailProvider } from '../../domain/interfaces/email-provider.interface';
 import { CreateNotificationDto, Channel, NotificationType } from '../dtos/create-notification.dto';
 import { NotificationResponseDto, SystemNotificationResponseDto } from '../dtos/notification-response.dto';
 import { NotificationMapper, SystemNotificationMapper } from '../../infrastructure/mappers/notification.mapper';
-import { EmailCombinerService } from '../../infrastructure/services/email-combiner.service';
+import { NotificationQueueService } from '../../infrastructure/services/notification-queue.service';
+import { NotificationJobData } from '../../infrastructure/processors/notification.processor';
+
+export type OperationResult = { success: boolean; message: string };
 
 @Injectable()
 export class NotificationService {
@@ -13,16 +14,19 @@ export class NotificationService {
 
   constructor(
     @Inject('NOTIFICATION_REPOSITORY') private readonly notificationRepository: NotificationRepository,
-    @Inject('EMAIL_PROVIDER') private readonly emailProvider: EmailProvider,
-    private readonly configService: ConfigService,
     private readonly notificationMapper: NotificationMapper,
     private readonly systemNotificationMapper: SystemNotificationMapper,
-    private readonly emailCombinerService: EmailCombinerService,
+    private readonly notificationQueueService: NotificationQueueService,
   ) {}
 
   async createNotification(createDto: CreateNotificationDto): Promise<NotificationResponseDto> {
     // Validate input based on channel
     this.validateNotificationData(createDto);
+
+    // Ensure system notifications are always processed as instant
+    if (createDto.channel === Channel.SYSTEM) {
+      createDto.type = NotificationType.INSTANT;
+    }
 
     // Generate batch key for batch notifications
     const batchKey = createDto.type === NotificationType.BATCH 
@@ -39,27 +43,45 @@ export class NotificationService {
       systemData: createDto.systemData,
     });
 
-    // Process based on type
+    // Prepare job data for queue processing
+    const jobData: NotificationJobData = {
+      notificationId: notification.id,
+      eventName: createDto.eventName,
+      channel: createDto.channel,
+      type: createDto.type,
+      batchKey,
+      emailData: createDto.emailData,
+      systemData: createDto.systemData,
+    };
+
+    // Process based on type using BullMQ
     if (createDto.type === NotificationType.INSTANT) {
-      await this.processInstantNotification(notification);
+      // Add instant notification to queue for immediate processing
+      await this.notificationQueueService.addInstantNotification(jobData);
+      this.logger.log(`Instant notification ${notification.id} added to queue`);
     } else {
-      await this.processBatchNotification(notification);
+      // Add batch notification to queue
+      const recipient = createDto.emailData?.to || createDto.systemData?.userId.toString() || '';
+      const result = await this.notificationQueueService.addBatchNotification(jobData, batchKey!, recipient);
+      this.logger.log(`Batch notification ${notification.id} added to queue. Job ID: ${result.jobId}`);
     }
 
     return this.notificationMapper.toDto(notification);
   }
 
   private validateNotificationData(createDto: CreateNotificationDto): void {
+    // Validate that email data is provided for EMAIL channel
     if (createDto.channel === Channel.EMAIL && !createDto.emailData) {
       throw new BadRequestException('Email data is required for EMAIL channel');
     }
 
+    // Validate that system data is provided for SYSTEM channel
     if (createDto.channel === Channel.SYSTEM && !createDto.systemData) {
       throw new BadRequestException('System data is required for SYSTEM channel');
     }
 
+    // Validate email format if email data is provided
     if (createDto.channel === Channel.EMAIL && createDto.emailData) {
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(createDto.emailData.to)) {
         throw new BadRequestException('Invalid email address format');
@@ -71,110 +93,49 @@ export class NotificationService {
     return `${eventName}_${channel}_${recipient || 'system'}`;
   }
 
-  private async processInstantNotification(notification: any): Promise<void> {
-    try {
-      if (notification.channel === 'EMAIL' && notification.email) {
-        const result = await this.emailProvider.sendEmail(
-          notification.email.to,
-          notification.email.subject,
-          notification.email.body,
-          notification.email.meta,
-        );
-
-        if (result.success) {
-          await this.notificationRepository.updateStatus(notification.id, 'SENT');
-          // Update email notification with provider info
-          // This would require additional repository method
-        } else {
-          await this.notificationRepository.updateStatus(notification.id, 'ERROR', result.error);
-        }
-      } else if (notification.channel === 'SYSTEM') {
-        // System notifications are always processed as instant
-        await this.notificationRepository.updateStatus(notification.id, 'SENT');
-      }
-    } catch (error) {
-      this.logger.error(`Failed to process instant notification ${notification.id}`, error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await this.notificationRepository.updateStatus(notification.id, 'ERROR', errorMessage);
-    }
-  }
-
-  private async processBatchNotification(notification: any): Promise<void> {
-    try {
-      // Check if batch is ready to process
-      const batchNotifications = await this.notificationRepository.findByBatchKey(notification.batchKey);
-      
-      const maxSize = this.configService.get<number>('BATCH_MAX_SIZE', 5);
-      const maxWaitTime = this.configService.get<number>('BATCH_MAX_WAIT_TIME', 7200); // 2 hours
-      
-      const oldestNotification = batchNotifications[0];
-      const timeSinceFirst = Date.now() - oldestNotification.createdAt.getTime();
-      
-      if (batchNotifications.length >= maxSize || timeSinceFirst >= maxWaitTime * 1000) {
-        await this.processBatch(batchNotifications);
-      }
-    } catch (error) {
-      this.logger.error(`Failed to process batch notification ${notification.id}`, error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await this.notificationRepository.updateStatus(notification.id, 'ERROR', errorMessage);
-    }
-  }
-
-  private async processBatch(notifications: any[]): Promise<void> {
-    if (notifications.length === 0) return;
-
-    const firstNotification = notifications[0];
-    
-    if (firstNotification.channel === 'EMAIL') {
-      // Extract email notifications
-      const emailNotifications = notifications
-        .filter(n => n.email)
-        .map(n => ({
-          subject: n.email.subject,
-          body: n.email.body,
-          to: n.email.to,
-        }));
-
-      if (emailNotifications.length === 0) {
-        this.logger.warn('No email notifications found in batch');
-        return;
-      }
-
-      // Combine email content using the service
-      const combinedSubject = this.emailCombinerService.combineEmailSubjects(emailNotifications);
-      const combinedBody = this.emailCombinerService.combineEmailBodies(emailNotifications);
-      const recipientEmail = this.emailCombinerService.getRecipientEmail(emailNotifications);
-      
-      const result = await this.emailProvider.sendEmail(
-        recipientEmail,
-        combinedSubject,
-        combinedBody,
-      );
-
-      // Update all notifications in batch
-      for (const notification of notifications) {
-        if (result.success) {
-          await this.notificationRepository.updateStatus(notification.id, 'SENT');
-        } else {
-          await this.notificationRepository.updateStatus(notification.id, 'ERROR', result.error);
-        }
-      }
-    }
-  }
-
-
-
   async getSystemNotifications(userId: number): Promise<SystemNotificationResponseDto[]> {
+    // Fetch system notifications for a specific user
     const notifications = await this.notificationRepository.findSystemNotificationsByUserId(userId);
     return this.systemNotificationMapper.toDtoArray(notifications);
   }
 
   async markAsRead(notificationId: number): Promise<SystemNotificationResponseDto> {
+    // Mark a specific notification as read
     const notification = await this.notificationRepository.markAsRead(notificationId);
     return this.systemNotificationMapper.toDto(notification);
   }
 
-  async deleteNotification(notificationId: number): Promise<void> {
+  async deleteNotification(notificationId: number): Promise<OperationResult> {
+    // Delete a specific notification
     await this.notificationRepository.delete(notificationId);
+    return { success: true, message: 'Notification deleted successfully' };
   }
-} 
+
+  /**
+   * Get queue statistics
+   */
+  async getQueueStats() {
+    return this.notificationQueueService.getQueueStats();
+  }
+
+  /**
+   * Clean queue (remove old completed/failed jobs)
+   */
+  async cleanQueue(): Promise<OperationResult> {
+    return this.notificationQueueService.cleanQueue();
+  }
+
+  /**
+   * Pause queue processing
+   */
+  async pauseQueue(): Promise<OperationResult> {
+    return this.notificationQueueService.pauseQueue();
+  }
+
+  /**
+   * Resume queue processing
+   */
+  async resumeQueue(): Promise<OperationResult> {
+    return this.notificationQueueService.resumeQueue();
+  }
+}

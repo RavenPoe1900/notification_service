@@ -75,7 +75,7 @@ export class SystemNotificationResponseDto {
     example: '2025-01-01T12:00:00.000Z',
     required: false,
   })
-  createdAt?: Date;
+  createdAt: Date;
 
   @ApiProperty({
     description: 'User ID who should receive this notification',
