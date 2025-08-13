@@ -1,88 +1,66 @@
-import { Type } from '@nestjs/common';
+import { ApiOperationOptions, ApiResponseOptions } from '@nestjs/swagger';
 
-export function createSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
-  return {
-    apiOperation: { summary: `Create ${text}` },
-    apiResponse: {
-      status: 200,
-      description: `Return ${text}`,
-      type: model,
-    },
-  };
+export interface IHttpSwagger {
+  apiOperation: ApiOperationOptions;
+  apiResponse: ApiResponseOptions;
 }
 
-export function findSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
-  return {
-    apiOperation: { summary: `List ${text}` },
-    apiResponse: {
-      status: 200,
-      description: `Returns a ${text} List`,
-      type: model,
-      isArray: true,
-    },
-  };
-}
-
-export function findOneSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
+export function createSwagger(dto: any, tag: string): IHttpSwagger {
   return {
     apiOperation: {
-      summary: text === 'verify' || text === 'otp' ? `Find One ${text}` : text,
+      summary: `Create a new ${tag}`,
+      description: `Endpoint to create a new ${tag.toLowerCase()}.`,
+      tags: [tag],
     },
     apiResponse: {
-      status: 200,
-      description: `Return ${text}`,
-      type: model,
-    },
-  };
-}
-
-export function updateSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
-  return {
-    apiOperation: { summary: `Update ${text}` },
-    apiResponse: {
-      status: 200,
-      description: `Return ${text}`,
-      type: model,
+      status: 201,
+      description: `${tag} created successfully`,
+      type: dto,
     },
   };
 }
 
-export function deleteSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
+export function findSwagger(dto: any, tag: string): IHttpSwagger {
   return {
-    apiOperation: { summary: `Delete ${text}` },
+    apiOperation: {
+      summary: `Retrieve ${tag}`,
+      description: `Endpoint to retrieve ${tag.toLowerCase()} details or list.`,
+      tags: [tag],
+    },
     apiResponse: {
       status: 200,
-      description: `Return ${text}`,
-      type: model,
+      description: `${tag} retrieved successfully`,
+      type: dto,
     },
   };
 }
 
-export function averageSwagger<TModel extends Type<any>>(
-  model: TModel,
-  text: string,
-) {
+export function updateSwagger(dto: any, tag: string): IHttpSwagger {
   return {
-    apiOperation: { summary: `Return average ${text}` },
+    apiOperation: {
+      summary: `Update ${tag}`,
+      description: `Endpoint to update an existing ${tag.toLowerCase()}.`,
+      tags: [tag],
+    },
     apiResponse: {
       status: 200,
-      description: `Return ${text}`,
-      type: model,
+      description: `${tag} updated successfully`,
+      type: dto,
+    },
+  };
+}
+
+export function deleteSwagger(dto: any, tag: string): IHttpSwagger {
+  return {
+    apiOperation: {
+      summary: `Delete ${tag}`,
+      description: `Endpoint to delete an existing ${tag.toLowerCase()}.`,
+      tags: [tag],
+    },
+    apiResponse: {
+      status: 204,
+      description: `${tag} deleted successfully`,
+      type: dto,
     },
   };
 }

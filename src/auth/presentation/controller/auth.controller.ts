@@ -27,19 +27,18 @@ import { AuthService } from '../../application/services/auth.service';
   path: 'auth',
   version: '1',
 })
-@Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   /**
    * Authenticates a user.
-   * @param credentials DTO containing the user's login credentials.
-   * @returns The authentication token and user information or an error.
+   * @param loginDto DTO containing the user's login credentials.
+   * @returns The authentication token and user information.
    */
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiResponseSwagger(
-    genericSwagger(LoginResponseDto, 'Login', 'Return accesstoken'),
+    genericSwagger(LoginResponseDto, 'Login', 'Return access token and user information'),
   )
   @Post('login')
   login(@Body() loginDto: LoginDto) {
@@ -48,8 +47,8 @@ export class AuthController {
 
   /**
    * Registers a new user.
-   * @param body DTO containing the user's registration information.
-   * @returns The created user information with tokens or an error.
+   * @param signUpDto DTO containing the user's registration information.
+   * @returns The created user information with tokens.
    */
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -63,8 +62,8 @@ export class AuthController {
 
   /**
    * Refreshes the access token using a refresh token.
-   * @param body DTO containing the refresh token.
-   * @returns New access and refresh tokens or an error.
+   * @param refreshTokenDto DTO containing the refresh token.
+   * @returns New access and refresh tokens.
    */
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -79,7 +78,7 @@ export class AuthController {
   /**
    * Logs out the current user by revoking all refresh tokens.
    * @param req Request object containing user information.
-   * @returns Success message or an error.
+   * @returns Success message.
    */
   @HttpCode(HttpStatus.OK)
   @ApiResponseSwagger(
@@ -91,14 +90,13 @@ export class AuthController {
   }
 
   /**
-   * Retrieves or updates the user profile.
-   * @param userId The ID of the user whose profile is being accessed or updated.
-   * @param body Optional DTO containing the updated profile information.
-   * @returns The user profile information or an error.
+   * Retrieves the user profile.
+   * @param req Request object containing user information.
+   * @returns The user profile information.
    */
   @HttpCode(HttpStatus.OK)
   @ApiResponseSwagger(
-    genericSwagger(SignUpResponseDto, 'Profile', 'Return Profile'),
+    genericSwagger(SignUpResponseDto, 'Profile', 'Return user profile'),
   )
   @Get('profile')
   getProfile(@Request() req: RequestWithUser): IPayload {
@@ -106,14 +104,14 @@ export class AuthController {
   }
 
   /**
-   * Retrieves or updates the user profile.
-   * @param userId The ID of the user whose profile is being accessed or updated.
-   * @param body Optional DTO containing the updated profile information.
-   * @returns The user profile information or an error.
+   * Changes the role of the current user.
+   * @param req Request object containing user information.
+   * @param changeUserDto DTO containing the new role.
+   * @returns Success message.
    */
   @HttpCode(HttpStatus.OK)
   @ApiResponseSwagger(
-    genericSwagger(SignUpResponseDto, 'Profile', 'Return Profile'),
+    genericSwagger(SignUpResponseDto, 'Change Role', 'Role updated successfully'),
   )
   @Post('change_role')
   changeRole(

@@ -17,7 +17,6 @@ import { UsersService } from '../../application/services/users.service';
 import {
   createSwagger,
   deleteSwagger,
-  findOneSwagger,
   findSwagger,
   updateSwagger,
 } from 'src/shared/infrastructure/swagger/http.swagger';
@@ -29,6 +28,7 @@ import { Roles } from 'src/auth/application/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { UserResponseDto } from '../../application/dtos/user-response.dto';
 import { GenericApplicationCrudServicePort } from 'src/shared/domain/interfaces/generic-application-crud.service.port';
+import { findOneSwagger } from 'src/shared/domain/swagger/http.swagger';
 
 @ApiTags('Users')
 @Controller({ path: 'users', version: '1' })
