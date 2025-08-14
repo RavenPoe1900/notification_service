@@ -1,14 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import {
-  BatchProcessingJobData,
-  NotificationJobData,
-} from '../processors/notification.processor';
-import { NotificationRepository } from '../../domain/interfaces/notification-repository.interface';
+import { BatchProcessingJobData, NotificationJobData } from '../../domain/types/notification-job-data.types';
+import { OperationResult } from '../../domain/types/notification.types';
+import { NotificationService } from '../../application/services/notification.service';
 
-export type OperationResult = { success: boolean; message: string };
 
 @Injectable()
 export class NotificationQueueService {
@@ -17,8 +14,7 @@ export class NotificationQueueService {
   constructor(
     @InjectQueue('notifications') private readonly queue: Queue,
     private readonly config: ConfigService,
-    @Inject('NOTIFICATION_REPOSITORY')
-    private readonly repo: NotificationRepository,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /* -------- INSTANT -------- */
@@ -49,7 +45,7 @@ export class NotificationQueueService {
     const maxWait = this.config.get<number>('BATCH_MAX_WAIT_TIME', 7200); // seconds
 
     // Check for existing notifications in the batch
-    const existing = await this.repo.findByBatchKey(batchKey);
+    const existing = await this.notificationService.findByBatchKey(batchKey);
     const scheduled: { jobId?: string } = {};
 
     // If this is the first notification in the batch, schedule a timeout job

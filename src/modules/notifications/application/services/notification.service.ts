@@ -1,49 +1,87 @@
-import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
-import { NotificationRepository } from '../../domain/interfaces/notification-repository.interface';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { CreateNotificationDto, Channel, NotificationType } from '../dtos/create-notification.dto';
 import { NotificationResponseDto, SystemNotificationResponseDto } from '../dtos/notification-response.dto';
 import { NotificationMapper, SystemNotificationMapper } from '../../infrastructure/mappers/notification.mapper';
 import { NotificationQueueService } from '../../infrastructure/services/notification-queue.service';
-import { NotificationJobData } from '../../infrastructure/processors/notification.processor';
-
-export type OperationResult = { success: boolean; message: string };
+import { PrismaService } from 'nestjs-prisma';
+import { NotificationStatus, Prisma } from '@prisma/client';
+import { PrismaGenericService } from 'src/shared/infrastructure/generic/prisma-generic.service';
+import type { Notification, OperationResult } from '../../domain/types/notification.types';
+import { NotificationJobData } from '../../domain/types/notification-job-data.types';
+import { notificationArgs } from '../../infrastructure/prisma/notification.select';
 
 @Injectable()
-export class NotificationService {
+export class NotificationService extends PrismaGenericService<
+    Notification,
+    Prisma.NotificationCreateArgs,
+    Prisma.NotificationFindManyArgs,
+    Prisma.NotificationFindUniqueArgs,
+    Prisma.NotificationUpdateArgs,
+    Prisma.NotificationDeleteArgs
+  >  {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
-    @Inject('NOTIFICATION_REPOSITORY') private readonly notificationRepository: NotificationRepository,
     private readonly notificationMapper: NotificationMapper,
     private readonly systemNotificationMapper: SystemNotificationMapper,
     private readonly notificationQueueService: NotificationQueueService,
-  ) {}
+    prismaService: PrismaService,
+  ) {
+    super(prismaService.notification, {
+      modelName: 'Notification',
+      errorDictionary: {
+        Notification: {
+          unique: {
+            eventName: 'A notification with this event name already exists.',
+          },
+        },
+      },
+    });
+  }
 
   async createNotification(createDto: CreateNotificationDto): Promise<NotificationResponseDto> {
-    // Validate input based on channel
     this.validateNotificationData(createDto);
 
-    // Ensure system notifications are always processed as instant
     if (createDto.channel === Channel.SYSTEM) {
       createDto.type = NotificationType.INSTANT;
     }
 
-    // Generate batch key for batch notifications
     const batchKey = createDto.type === NotificationType.BATCH 
       ? this.generateBatchKey(createDto.eventName, createDto.channel, createDto.emailData?.to)
       : undefined;
 
-    // Create notification in database
-    const notification = await this.notificationRepository.create({
-      eventName: createDto.eventName,
-      channel: createDto.channel,
-      type: createDto.type,
-      batchKey,
-      emailData: createDto.emailData,
-      systemData: createDto.systemData,
-    });
+    const args: Prisma.NotificationCreateArgs = {
+      data: {
+        eventName: createDto.eventName,
+        channel: createDto.channel,
+        type: createDto.type,
+        batchKey,
+        status: NotificationStatus.PENDING,
+        email: createDto.emailData
+          ? {
+              create: {
+                to: createDto.emailData.to,
+                subject: createDto.emailData.subject,
+                body: createDto.emailData.body,
+                meta: createDto.emailData.meta,
+                providerUsed: process.env.EMAIL_PROVIDER
+              },
+            }
+          : undefined,
+        system: createDto.systemData
+          ? {
+              create: {
+                userId: createDto.systemData.userId,
+                content: createDto.systemData.content,
+                isRead: false,
+              },
+            }
+          : undefined,
+      },
+    };
 
-    // Prepare job data for queue processing
+    const notification = await super.create(args);
+
     const jobData: NotificationJobData = {
       notificationId: notification.id,
       eventName: createDto.eventName,
@@ -54,16 +92,12 @@ export class NotificationService {
       systemData: createDto.systemData,
     };
 
-    // Process based on type using BullMQ
     if (createDto.type === NotificationType.INSTANT) {
-      // Add instant notification to queue for immediate processing
       await this.notificationQueueService.addInstantNotification(jobData);
       this.logger.log(`Instant notification ${notification.id} added to queue`);
     } else {
-      // Add batch notification to queue
       const recipient = createDto.emailData?.to || createDto.systemData?.userId.toString() || '';
-      const result = await this.notificationQueueService.addBatchNotification(jobData, batchKey!, recipient);
-      this.logger.log(`Batch notification ${notification.id} added to queue. Job ID: ${result.jobId}`);
+      await this.notificationQueueService.addBatchNotification(jobData, batchKey!, recipient);
     }
 
     return this.notificationMapper.toDto(notification);
@@ -82,6 +116,7 @@ export class NotificationService {
 
     // Validate email format if email data is provided
     if (createDto.channel === Channel.EMAIL && createDto.emailData) {
+      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(createDto.emailData.to)) {
         throw new BadRequestException('Invalid email address format');
@@ -94,20 +129,77 @@ export class NotificationService {
   }
 
   async getSystemNotifications(userId: number): Promise<SystemNotificationResponseDto[]> {
-    // Fetch system notifications for a specific user
-    const notifications = await this.notificationRepository.findSystemNotificationsByUserId(userId);
-    return this.systemNotificationMapper.toDtoArray(notifications);
+    const notifications = await super.findAll({
+      filter: {
+        system: {
+          userId,
+          deletedAt: null,
+        },
+      },
+      orderBy: {
+        id: 'desc',
+      },
+    });
+    return this.systemNotificationMapper.toDtoArray(notifications.data);
+  }
+
+  protected get prismaService(): PrismaService {
+    return (this as any).model as PrismaService;
   }
 
   async markAsRead(notificationId: number): Promise<SystemNotificationResponseDto> {
-    // Mark a specific notification as read
-    const notification = await this.notificationRepository.markAsRead(notificationId);
-    return this.systemNotificationMapper.toDto(notification);
+    const systemNotification = await this.prismaService.systemNotification.update({
+      where: { notificationId },
+      data: { isRead: true, readAt: new Date() },
+    });
+    return {
+      id: systemNotification.id,
+      content: systemNotification.content,
+      isRead: systemNotification.isRead,
+      readAt: systemNotification.readAt,
+      userId: systemNotification.userId,
+      createdAt: new Date(), // Placeholder for missing field
+    };
+  }
+
+  async updateStatus(notificationId: number, status: NotificationStatus, errorMsg?: string): Promise<void> {
+    await super.update(
+      { where: { id: notificationId } },
+      { 
+        where: { id: notificationId },
+        data: { 
+        status: status,
+        errorMsg, 
+        processedAt: status === NotificationStatus.SENT ? new Date() : undefined 
+      } }
+    );
+  }
+
+  async findPendingBatchNotifications(): Promise<Notification[]> {
+    const result = await super.findAll({
+      filter: {
+        type: NotificationType.BATCH,
+        status: NotificationStatus.PENDING,
+        batchKey: { not: null },
+      },
+    });
+    return result.data;
+  }
+
+  async findByBatchKey(batchKey: string): Promise<NotificationResponseDto[]> {
+    const find = (await super.findAll({
+      where: { batchKey: batchKey as any },
+      ...notificationArgs,
+    })).data;
+
+    return this.notificationMapper.toDtoArray(find);
   }
 
   async deleteNotification(notificationId: number): Promise<OperationResult> {
-    // Delete a specific notification
-    await this.notificationRepository.delete(notificationId);
+    const findArgs = { where: { id: notificationId } };
+    const deleteArgs = { where: { id: notificationId } };
+
+    await super.remove(findArgs, deleteArgs);
     return { success: true, message: 'Notification deleted successfully' };
   }
 

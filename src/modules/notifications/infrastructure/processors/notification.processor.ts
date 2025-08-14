@@ -1,35 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { NotificationRepository } from '../../domain/interfaces/notification-repository.interface';
 import { EmailProvider } from '../../domain/interfaces/email-provider.interface';
 import { EmailCombinerService } from '../services/email-combiner.service';
-
-/* ---------- Tipos de datos que viajan en los jobs ---------- */
-export interface NotificationJobData {
-  notificationId: number;
-  eventName: string;
-  channel: string;        // 'EMAIL' | 'SYSTEM'
-  type: string;           // 'INSTANT' | 'BATCH' (solo informativo)
-  batchKey?: string;
-  emailData?: {
-    to: string;
-    subject: string;
-    body: string;
-    meta?: any;
-  };
-  systemData?: {
-    userId: number;
-    content: string;
-  };
-}
-
-export interface BatchProcessingJobData {
-  batchKey: string;
-  channel: string;        // 'EMAIL' | 'SYSTEM'
-  eventName: string;
-  recipient: string;      // email del destinatario principal
-}
+import { NotificationJobData, BatchProcessingJobData } from '../../domain/types/notification-job-data.types';
+import { NotificationService } from '../../application/services/notification.service';
 
 /* ---------- Processor principal ---------- */
 @Processor('notifications')
@@ -37,13 +12,10 @@ export class NotificationProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationProcessor.name);
 
   constructor(
-    @Inject('NOTIFICATION_REPOSITORY')
-    private readonly notificationRepository: NotificationRepository,
-
     @Inject('EMAIL_PROVIDER')
     private readonly emailProvider: EmailProvider,
-
     private readonly emailCombinerService: EmailCombinerService,
+    private readonly notificationService: NotificationService,
   ) {
     super();
   }
@@ -87,20 +59,20 @@ export class NotificationProcessor extends WorkerHost {
         );
 
         if (result.success) {
-          await this.notificationRepository.updateStatus(notificationId, 'SENT');
+          await this.notificationService.updateStatus(notificationId, 'SENT');
           this.logger.log(`Email sent successfully for notification ${notificationId}`);
         } else {
-          await this.notificationRepository.updateStatus(notificationId, 'ERROR', result.error);
+          await this.notificationService.updateStatus(notificationId, 'ERROR', result.error);
           this.logger.error(`Failed to send email for notification ${notificationId}: ${result.error}`);
           throw new Error(result.error);
         }
       } else if (channel === 'SYSTEM') {
-        await this.notificationRepository.updateStatus(notificationId, 'SENT');
+        await this.notificationService.updateStatus(notificationId, 'SENT');
         this.logger.log(`System notification ${notificationId} marked as sent`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      await this.notificationRepository.updateStatus(notificationId, 'ERROR', message);
+      await this.notificationService.updateStatus(notificationId, 'ERROR', message);
       this.logger.error(`Failed to process instant notification ${notificationId}`, error);
       throw error;
     }
@@ -111,7 +83,7 @@ export class NotificationProcessor extends WorkerHost {
     this.logger.log(`Processing batch notifications for key: ${batchKey}`);
 
     try {
-      const batch = await this.notificationRepository.findByBatchKey(batchKey);
+      const batch = await this.notificationService.findByBatchKey(batchKey);
       if (!batch.length) {
         this.logger.warn(`No notifications found for batch key: ${batchKey}`);
         return;
@@ -134,7 +106,7 @@ export class NotificationProcessor extends WorkerHost {
         const result = await this.emailProvider.sendEmail(to, subject, body);
 
         for (const n of batch) {
-          await this.notificationRepository.updateStatus(
+          await this.notificationService.updateStatus(
             n.id,
             result.success ? 'SENT' : 'ERROR',
             result.success ? undefined : result.error,
@@ -143,7 +115,7 @@ export class NotificationProcessor extends WorkerHost {
         this.logger.log(`Batch email processed for ${batch.length} notifications`);
       } else if (channel === 'SYSTEM') {
         for (const n of batch) {
-          await this.notificationRepository.updateStatus(n.id, 'SENT');
+          await this.notificationService.updateStatus(n.id, 'SENT');
         }
         this.logger.log(`Batch system notifications processed as instant (${batch.length})`);
       }
@@ -151,9 +123,9 @@ export class NotificationProcessor extends WorkerHost {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed processing batch key ${batchKey}`, error);
 
-      const batch = await this.notificationRepository.findByBatchKey(batchKey);
+      const batch = await this.notificationService.findByBatchKey(batchKey);
       for (const n of batch) {
-        await this.notificationRepository.updateStatus(n.id, 'ERROR', message);
+        await this.notificationService.updateStatus(n.id, 'ERROR', message);
       }
       throw error;
     }

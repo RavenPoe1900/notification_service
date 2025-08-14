@@ -1,16 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { BaseMapper } from 'src/shared/infrastructure/mappers/base-mapper';
-
-
-import {
-  NotificationPrismaPayload,
-  SystemNotificationPrismaPayload,
-} from './types/notification.prisma-types';
+import { Notification } from '@prisma/client';
 import { NotificationResponseDto, SystemNotificationResponseDto } from '../../application/dtos/notification-response.dto';
 
 @Injectable()
 export class NotificationMapper extends BaseMapper<
-  NotificationPrismaPayload,
+  Notification,
   NotificationResponseDto
 > {
   protected getSourceType() {
@@ -20,19 +15,32 @@ export class NotificationMapper extends BaseMapper<
     return 'NotificationResponseDto';
   }
 
-  toDto(entity: NotificationPrismaPayload): NotificationResponseDto {
-    return this.map(entity);
+  toDto(entity: Notification): NotificationResponseDto {
+    const emailData = entity as any;
+    const systemData = entity as any;
+
+    return {
+      id: entity.id,
+      eventName: entity.eventName,
+      channel: entity.channel,
+      type: entity.type,
+      status: entity.status,
+      batchKey: entity.batchKey,
+      emailData: emailData.emailData || undefined,
+      systemData: systemData.systemData || undefined,
+      createdAt: entity.createdAt,
+      processedAt: entity.processedAt,
+    };
   }
-  toDtoArray(
-    entities: NotificationPrismaPayload[],
-  ): NotificationResponseDto[] {
-    return this.mapArray(entities);
+
+  toDtoArray(entities: Notification[]): NotificationResponseDto[] {
+    return entities.map((entity) => this.toDto(entity));
   }
 }
 
 @Injectable()
 export class SystemNotificationMapper extends BaseMapper<
-  SystemNotificationPrismaPayload,
+  Notification,
   SystemNotificationResponseDto
 > {
   protected getSourceType() {
@@ -42,14 +50,30 @@ export class SystemNotificationMapper extends BaseMapper<
     return 'SystemNotificationResponseDto';
   }
 
-  toDto(
-    entity: SystemNotificationPrismaPayload,
-  ): SystemNotificationResponseDto {
-    return this.map(entity);
+  toDto(entity: Notification): SystemNotificationResponseDto {
+    const systemData = entity as any;
+
+    return {
+      id: entity.id,
+      content: systemData.systemData?.content || '',
+      userId: systemData.systemData?.userId || 0,
+      createdAt: entity.createdAt,
+      readAt: entity.processedAt,
+      isRead: !!entity.processedAt,
+    };
   }
-  toDtoArray(
-    entities: SystemNotificationPrismaPayload[],
-  ): SystemNotificationResponseDto[] {
-    return this.mapArray(entities);
+
+  toDtoArray(entities: Notification[]): SystemNotificationResponseDto[] {
+    return entities.map((entity) => {
+      const systemData = entity as any;
+      return {
+        id: entity.id,
+        content: systemData.systemData?.content || '',
+        userId: systemData.systemData?.userId || 0,
+        createdAt: entity.createdAt,
+        readAt: entity.processedAt,
+        isRead: !!entity.processedAt,
+      };
+    });
   }
 }

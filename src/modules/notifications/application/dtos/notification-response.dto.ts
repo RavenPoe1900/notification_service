@@ -154,4 +154,24 @@ export class NotificationResponseDto {
     required: false,
   })
   system?: SystemNotificationResponseDto;
-} 
+
+  @ApiProperty({
+    description: 'Email data for the notification',
+    required: false,
+  })
+  emailData?: {
+    to: string;
+    subject: string;
+    body: string;
+    meta?: any;
+  };
+
+  @ApiProperty({
+    description: 'System data for the notification',
+    required: false,
+  })
+  systemData?: {
+    userId: number;
+    content: string;
+  };
+}
