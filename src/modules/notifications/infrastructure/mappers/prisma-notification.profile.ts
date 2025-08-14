@@ -1,9 +1,9 @@
 import {
+  Mapper,
   createMap,
   forMember,
   mapFrom,
   mapWith,
-  Mapper,
 } from '@automapper/core';
 import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import { EmailProvider, EmailData, EmailResult } from '../../domain/interfaces/email-provider.interface';
+import { EmailData, EmailProvider, EmailResult } from '../../domain/interfaces/email-provider.interface';
 
 @Injectable()
 export class GmailProviderService implements EmailProvider {

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { EmailTemplateService, BatchEmailData } from './email-template.service';
+import { BatchEmailData, EmailTemplateService } from './email-template.service';
 
 export interface EmailNotification {
   subject: string;

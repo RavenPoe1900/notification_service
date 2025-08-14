@@ -1,6 +1,6 @@
 // src/shared/domain/interfaces/generic-application-crud.service.port.ts
 
-import { GenericPaginatedResponse } from '../types/pagination.types'; // Your generic pagination type from the domain
+import { type GenericPaginatedResponse } from '../types/pagination.types'; // Your generic pagination type from the domain
 
 /**
  * Generic interface for an Application CRUD Service.

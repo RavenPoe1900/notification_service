@@ -1,16 +1,16 @@
 import {
+  Mapper,
   createMap,
   forMember,
   mapFrom,
   mapWith,
-  Mapper,
 } from '@automapper/core';
 import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
 
 import {
-  NotificationResponseDto,
   EmailNotificationResponseDto,
+  NotificationResponseDto,
   SystemNotificationResponseDto,
 } from '../../application/dtos/notification-response.dto';
 import { EmailNotificationPayload, NotificationPrismaPayload, SystemNotificationPayload } from './types/notification.prisma-types';

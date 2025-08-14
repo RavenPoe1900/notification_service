@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import formData from 'form-data';
 import Mailgun from 'mailgun.js';
-import { EmailProvider, EmailData, EmailResult } from '../../domain/interfaces/email-provider.interface';
+import { EmailData, EmailProvider, EmailResult } from '../../domain/interfaces/email-provider.interface';
 
 @Injectable()
 export class MailgunProviderService implements EmailProvider {

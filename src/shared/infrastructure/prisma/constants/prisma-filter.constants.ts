@@ -1,6 +1,6 @@
 // src/shared/infrastructure/persistence/prisma/utils/prisma-filter-builders.ts
 
-import { Prisma } from '@prisma/client';
+import { type Prisma } from '@prisma/client';
 
 /**
  * Builds a complete Prisma 'where' clause object for filtering by a unique ID field.

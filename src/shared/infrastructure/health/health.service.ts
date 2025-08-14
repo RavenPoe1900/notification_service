@@ -3,25 +3,7 @@ import { InjectMapper } from '@automapper/nestjs';
 import { Mapper } from '@automapper/core';
 import { PrismaService } from 'nestjs-prisma';
 import { createClient } from 'redis';
-
-export interface HealthStatus {
-  status: 'healthy' | 'unhealthy';
-  timestamp: string;
-  uptime: number;
-  version: string;
-  checks: {
-    redis: HealthCheck;
-    automapper: HealthCheck;
-    database: HealthCheck;
-    emailProviders: HealthCheck;
-  };
-}
-
-export interface HealthCheck {
-  status: 'healthy' | 'unhealthy';
-  responseTime: number;
-  error?: string;
-}
+import type { HealthCheck, HealthStatus } from '../../domain/interfaces/health-status.interface';
 
 @Injectable()
 export class HealthService {
@@ -174,8 +156,8 @@ export class HealthService {
     }
   }
 
-  private determineOverallStatus(checks: HealthStatus['checks']): 'healthy' | 'unhealthy' {
+  private determineOverallStatus(checks: Record<string, HealthCheck>): 'healthy' | 'unhealthy' {
     const allHealthy = Object.values(checks).every(check => check.status === 'healthy');
     return allHealthy ? 'healthy' : 'unhealthy';
   }
-} 
+}

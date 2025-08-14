@@ -1,10 +1,10 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import {
-  NotificationJobData,
   BatchProcessingJobData,
+  NotificationJobData,
 } from '../processors/notification.processor';
 import { NotificationRepository } from '../../domain/interfaces/notification-repository.interface';
 

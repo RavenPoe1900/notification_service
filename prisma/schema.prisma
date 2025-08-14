@@ -1,13 +1,11 @@
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [postgis()]
 }
 
 generator client {
   provider        = "prisma-client-js"
   binaryTargets   = "native"
-  previewFeatures = ["postgresqlExtensions"]
 }
 
 /* ----------------------  ENUMS ---------------------- */

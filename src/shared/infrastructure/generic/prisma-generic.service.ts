@@ -7,12 +7,12 @@ import { Prisma } from '@prisma/client';
 import { PaginatedResponse } from '../../applications/dtos/paginationResponse.dto';
 
 import {
-  PrismaCrudDelegate,
   PrismaCountArgs,
-  PrismaWhereArg,
+  PrismaCrudDelegate,
+  PrismaIncludeArg,
   PrismaOrderByArg,
   PrismaSelectArg,
-  PrismaIncludeArg,
+  PrismaWhereArg,
 } from './prisma-crud-delegate.type';
 import { DictSection, ServiceOptions, SoftDeleteCfg } from './service-options.interface';
 import { GenericCrudService } from 'src/shared/domain/interfaces/generic-crud-service.port';
@@ -177,7 +177,7 @@ export class PrismaGenericService<
         return await this.model.update({ ...updateArgs, where });
       } catch (e) {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025')
-          throw new NotFoundException('Item not found');
+          {throw new NotFoundException('Item not found');}
         throw e;
       }
     });

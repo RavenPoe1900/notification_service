@@ -1,9 +1,9 @@
 import {
+  Channel,
+  NotificationStatus,
+  NotificationType,
   PrismaClient,
   Role,
-  Channel,
-  NotificationType,
-  NotificationStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 

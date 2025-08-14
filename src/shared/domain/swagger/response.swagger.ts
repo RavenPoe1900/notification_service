@@ -1,6 +1,6 @@
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { applyDecorators } from '@nestjs/common';
-import { IHttpSwagger } from '../interfaces/http-swagger.interface';
+import { type IHttpSwagger } from '../interfaces/http-swagger.interface';
 
 export const ApiResponseSwagger = (httpSwagger: IHttpSwagger) => {
   return applyDecorators(

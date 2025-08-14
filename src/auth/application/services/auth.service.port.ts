@@ -1,8 +1,8 @@
-import { LoginDto } from '../dtos/login.dto';
-import { LoginResponseDto } from '../dtos/login-response.dto';
-import { SignUpDto } from '../dtos/sign-up.dto';
-import { RefreshTokenDto } from '../dtos/refresh-token.dto';
-import { Role } from '@prisma/client';
+import { type LoginDto } from '../dtos/login.dto';
+import { type LoginResponseDto } from '../dtos/login-response.dto';
+import { type SignUpDto } from '../dtos/sign-up.dto';
+import { type RefreshTokenDto } from '../dtos/refresh-token.dto';
+import { type Role } from '@prisma/client';
 
 /**
  * Interface for the application's authentication service.
