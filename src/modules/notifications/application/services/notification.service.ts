@@ -1,30 +1,33 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { CreateNotificationDto, Channel, NotificationType } from '../dtos/create-notification.dto';
-import { NotificationResponseDto, SystemNotificationResponseDto } from '../dtos/notification-response.dto';
-import { NotificationMapper, SystemNotificationMapper } from '../../infrastructure/mappers/notification.mapper';
-import { NotificationQueueService } from '../../infrastructure/services/notification-queue.service';
+import { NotificationResponseDto } from '../dtos/notification-response.dto';
 import { PrismaService } from 'nestjs-prisma';
 import { NotificationStatus, Prisma } from '@prisma/client';
 import { PrismaGenericService } from 'src/shared/infrastructure/generic/prisma-generic.service';
-import type { Notification, OperationResult } from '../../domain/types/notification.types';
+import type { Notification } from '../../domain/types/notification.types';
 import { NotificationJobData } from '../../domain/types/notification-job-data.types';
-import { notificationArgs } from '../../infrastructure/prisma/notification.select';
+import { SystemNotificationResponseDto } from '../dtos/notification-response.dto';
+import { NotificationMapper, SystemNotificationMapper } from '../../infrastructure/mappers/notification.mapper';
+import { NotificationQueueService } from '../../infrastructure/services/notification-queue.service';
+import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
+import { NotificationCommonService } from './notification-common.service';
 
 @Injectable()
 export class NotificationService extends PrismaGenericService<
-    Notification,
-    Prisma.NotificationCreateArgs,
-    Prisma.NotificationFindManyArgs,
-    Prisma.NotificationFindUniqueArgs,
-    Prisma.NotificationUpdateArgs,
-    Prisma.NotificationDeleteArgs
-  >  {
+  Notification,
+  Prisma.NotificationCreateArgs,
+  Prisma.NotificationFindManyArgs,
+  Prisma.NotificationFindUniqueArgs,
+  Prisma.NotificationUpdateArgs,
+  Prisma.NotificationDeleteArgs
+> {
   private readonly logger = new Logger(NotificationService.name);
 
   constructor(
     private readonly notificationMapper: NotificationMapper,
     private readonly systemNotificationMapper: SystemNotificationMapper,
     private readonly notificationQueueService: NotificationQueueService,
+    private readonly notificationCommonService: NotificationCommonService,
     prismaService: PrismaService,
   ) {
     super(prismaService.notification, {
@@ -163,39 +166,18 @@ export class NotificationService extends PrismaGenericService<
   }
 
   async updateStatus(notificationId: number, status: NotificationStatus, errorMsg?: string): Promise<void> {
-    await super.update(
-      { where: { id: notificationId } },
-      { 
-        where: { id: notificationId },
-        data: { 
-        status: status,
-        errorMsg, 
-        processedAt: status === NotificationStatus.SENT ? new Date() : undefined 
-      } }
-    );
+    await this.notificationCommonService.updateStatus(notificationId, status, errorMsg);
   }
 
   async findPendingBatchNotifications(): Promise<Notification[]> {
-    const result = await super.findAll({
-      filter: {
-        type: NotificationType.BATCH,
-        status: NotificationStatus.PENDING,
-        batchKey: { not: null },
-      },
-    });
-    return result.data;
+    return this.notificationCommonService.findPendingBatchNotifications();
   }
 
   async findByBatchKey(batchKey: string): Promise<NotificationResponseDto[]> {
-    const find = (await super.findAll({
-      where: { batchKey: batchKey as any },
-      ...notificationArgs,
-    })).data;
-
-    return this.notificationMapper.toDtoArray(find);
+    return await this.notificationCommonService.findByBatchKey(batchKey);
   }
 
-  async deleteNotification(notificationId: number): Promise<OperationResult> {
+  async deleteNotification(notificationId: number): Promise<OperationResultDto> {
     const findArgs = { where: { id: notificationId } };
     const deleteArgs = { where: { id: notificationId } };
 
@@ -213,21 +195,21 @@ export class NotificationService extends PrismaGenericService<
   /**
    * Clean queue (remove old completed/failed jobs)
    */
-  async cleanQueue(): Promise<OperationResult> {
+  async cleanQueue(): Promise<OperationResultDto> {
     return this.notificationQueueService.cleanQueue();
   }
 
   /**
    * Pause queue processing
    */
-  async pauseQueue(): Promise<OperationResult> {
+  async pauseQueue(): Promise<OperationResultDto> {
     return this.notificationQueueService.pauseQueue();
   }
 
   /**
    * Resume queue processing
    */
-  async resumeQueue(): Promise<OperationResult> {
+  async resumeQueue(): Promise<OperationResultDto> {
     return this.notificationQueueService.resumeQueue();
   }
 }

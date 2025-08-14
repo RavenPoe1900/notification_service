@@ -14,6 +14,7 @@ import { EmailCombinerService } from './infrastructure/services/email-combiner.s
 import { NotificationQueueService } from './infrastructure/services/notification-queue.service';
 import { NotificationProcessor } from './infrastructure/processors/notification.processor';
 import { NotificationMapper, SystemNotificationMapper } from './infrastructure/mappers/notification.mapper';
+import { NotificationCommonService } from './application/services/notification-common.service';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { NotificationMapper, SystemNotificationMapper } from './infrastructure/m
 
     PrismaService,
     NotificationService,
+    NotificationCommonService, // Added NotificationCommonService
 
     NotificationQueueService,
     NotificationProcessor,
@@ -46,6 +48,6 @@ import { NotificationMapper, SystemNotificationMapper } from './infrastructure/m
     GmailProviderService,
     MailgunProviderService,
   ],
-  exports: [NotificationService],
+  exports: [NotificationService, NotificationCommonService], // Exported NotificationCommonService
 })
 export class NotificationsModule {}
