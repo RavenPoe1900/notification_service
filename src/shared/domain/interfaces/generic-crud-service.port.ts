@@ -1,4 +1,4 @@
-import { GenericPaginatedResponse } from '../types/pagination.types';
+import { type GenericPaginatedResponse } from '../types/pagination.types';
 
 // Generic type definitions for CRUD arguments.
 // These types are abstract and do not directly depend on Prisma.

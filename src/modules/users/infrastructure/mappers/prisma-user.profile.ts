@@ -1,7 +1,6 @@
 import {
   createMap,
   forMember,
-  mapFrom,
   ignore,
   mapWith,
 } from '@automapper/core';
@@ -9,32 +8,23 @@ import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
 import { Mapper } from '@automapper/core';
 
-import { Prisma, Role, TripStatus, VehicleType } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma, Role } from '@prisma/client';
 import { UserRoleDetailDto } from '../../application/dtos/user-role-detail.dto';
-import { VehicleSummaryDto } from '../../application/dtos/vehicle-summary.dto';
-import { CarrierAccountSummaryDto } from '../../application/dtos/carrier-account-summary.dto';
-import { RatingDetailDto } from '../../application/dtos/rating-detail.dto';
 import { UserResponseDto } from '../../application/dtos/user-response.dto';
 import { userSelectWithoutPassword } from '../prisma/user.select';
-import { TripSummaryDto } from '../../application/dtos/trip-summary.dto';
 
 export const userArgsWithoutPassword =
   Prisma.validator<Prisma.UserDefaultArgs>()({
     select: userSelectWithoutPassword,
   });
 
-/* Alias tipado que siempre reflejará el SELECT */
+/* Typed alias that will always reflect the SELECT */
 export type UserPrismaPayload = Prisma.UserGetPayload<
   typeof userArgsWithoutPassword
 >;
 
-/* --- Tipos planos para relaciones --- */
+/* --- Plain types for relations --- */
 type UserRolePayload = { role: Role };
-type TripPayload = { id: number; status: TripStatus; totalAmount: Decimal };
-type VehiclePayload = { id: number; plate: string; type: VehicleType };
-type CarrierAccountPayload = { id: number; balance: Decimal; currency: string };
-type RatingPayload = { id: number; stars: number; comment: string | null };
 
 @Injectable()
 export class PrismaUserToDtoProfile extends AutomapperProfile {
@@ -44,52 +34,20 @@ export class PrismaUserToDtoProfile extends AutomapperProfile {
 
   override get profile() {
     return (mapper: Mapper) => {
-      /* ───── Sub-mapas (relaciones) ───── */
+      /* ───── Sub-maps (relations) ───── */
       createMap<UserRolePayload, UserRoleDetailDto>(
         mapper,
         'UserRole',
         UserRoleDetailDto,
-      );
+      );      
 
-      createMap<TripPayload, TripSummaryDto>(
-        mapper,
-        'Trip',
-        TripSummaryDto,
-        forMember(
-          (d) => d.totalAmount,
-          mapFrom((s) => s.totalAmount.toNumber()),
-        ),
-      );
-
-      createMap<VehiclePayload, VehicleSummaryDto>(
-        mapper,
-        'Vehicle',
-        VehicleSummaryDto,
-      );
-
-      createMap<CarrierAccountPayload, CarrierAccountSummaryDto>(
-        mapper,
-        'CarrierAccount',
-        CarrierAccountSummaryDto,
-        forMember(
-          (d) => d.balance,
-          mapFrom((s) => s.balance.toNumber()),
-        ),
-      );
-
-      createMap<RatingPayload, RatingDetailDto>(
-        mapper,
-        'Rating',
-        RatingDetailDto,
-      );
-
-      /* ───── Mapa principal Prisma → DTO ───── */
+      /* ───── Main map Prisma → DTO ───── */
       createMap<UserPrismaPayload, UserResponseDto>(
         mapper,
         'User',
         UserResponseDto,
 
-        // (opcional) ignorar password si alguna vez se incluyera
+        // (optional) ignore password if it were ever included
         forMember(() => (({}) as any).password, ignore()),
 
         forMember(

@@ -1,6 +1,6 @@
 // src/shared/infrastructure/persistence/prisma/utils/prisma-filter-builders.ts
 
-import { Prisma } from '@prisma/client';
+import { type Prisma } from '@prisma/client';
 
 /**
  * Builds a complete Prisma 'where' clause object for filtering by a unique ID field.
@@ -12,16 +12,16 @@ import { Prisma } from '@prisma/client';
  * @returns An object with the structure { where: { [fieldName]: idValue } }.
  */
 export function buildPrismaUniqueWhereClause<
-  TWhereUniqueInput extends Prisma.AtLeast<any, string>, // <-- Aquí se usa AtLeast con genéricos
+  TWhereUniqueInput extends Prisma.AtLeast<any, string>, // <-- Here AtLeast is used with generics
 >(
   idValue: number | string,
   fieldName: string = 'id',
 ): { where: TWhereUniqueInput } {
-  // <-- El tipo de retorno ahora usa TWhereUniqueInput
+  // <-- The return type now uses TWhereUniqueInput
   return {
     where: {
       [fieldName]: idValue,
-    } as TWhereUniqueInput, // <-- Se necesita un casteo aquí para satisfacer el tipo
+    } as TWhereUniqueInput, // <-- A cast is needed here to satisfy the type
   };
 }
 

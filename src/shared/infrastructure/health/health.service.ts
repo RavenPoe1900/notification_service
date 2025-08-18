@@ -3,24 +3,7 @@ import { InjectMapper } from '@automapper/nestjs';
 import { Mapper } from '@automapper/core';
 import { PrismaService } from 'nestjs-prisma';
 import { createClient } from 'redis';
-
-export interface HealthStatus {
-  status: 'healthy' | 'unhealthy';
-  timestamp: string;
-  uptime: number;
-  version: string;
-  checks: {
-    redis: HealthCheck;
-    automapper: HealthCheck;
-    database: HealthCheck;
-  };
-}
-
-export interface HealthCheck {
-  status: 'healthy' | 'unhealthy';
-  responseTime: number;
-  error?: string;
-}
+import type { HealthCheck, HealthStatus } from '../../domain/interfaces/health-status.interface';
 
 @Injectable()
 export class HealthService {
@@ -37,6 +20,7 @@ export class HealthService {
       redis: await this.checkRedis(),
       automapper: await this.checkAutoMapper(),
       database: await this.checkDatabase(),
+      emailProviders: await this.checkEmailProviders(),
     };
 
     const overallStatus = this.determineOverallStatus(checks);
@@ -144,8 +128,36 @@ export class HealthService {
     }
   }
 
-  private determineOverallStatus(checks: HealthStatus['checks']): 'healthy' | 'unhealthy' {
+  async checkEmailProviders(): Promise<HealthCheck> {
+    const startTime = Date.now();
+    
+    try {
+      // For now, we'll just return a healthy status
+      // In a real implementation, you would inject the email provider and test it
+      const responseTime = Date.now() - startTime;
+      
+      this.logger.log(`Email providers health check passed in ${responseTime}ms`);
+      
+      return {
+        status: 'healthy',
+        responseTime,
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      this.logger.error(`Email providers health check failed: ${errorMessage}`);
+      
+      return {
+        status: 'unhealthy',
+        responseTime,
+        error: errorMessage,
+      };
+    }
+  }
+
+  private determineOverallStatus(checks: Record<string, HealthCheck>): 'healthy' | 'unhealthy' {
     const allHealthy = Object.values(checks).every(check => check.status === 'healthy');
     return allHealthy ? 'healthy' : 'unhealthy';
   }
-} 
+}

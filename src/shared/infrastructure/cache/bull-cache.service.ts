@@ -148,13 +148,13 @@ export class BullCacheService {
     };
   }
 
-  // Métodos específicos para Bull MQ
+  // Specific methods for Bull MQ
   async getJobResult<T>(jobId: string, queueName: string): Promise<T | null> {
     return this.get<T>(`job_result:${queueName}:${jobId}`);
   }
 
   async setJobResult<T>(jobId: string, queueName: string, result: T): Promise<void> {
-    await this.set(`job_result:${queueName}:${jobId}`, result, { ttl: 86400 }); // 24 horas
+    await this.set(`job_result:${queueName}:${jobId}`, result, { ttl: 86400 }); // 24 hours
   }
 
   async getQueueStatus(queueName: string): Promise<any | null> {
@@ -162,7 +162,7 @@ export class BullCacheService {
   }
 
   async setQueueStatus(queueName: string, status: any): Promise<void> {
-    await this.set(`queue_status:${queueName}`, status, { ttl: 300 }); // 5 minutos
+    await this.set(`queue_status:${queueName}`, status, { ttl: 300 }); // 5 minutes
   }
 
   async getJobCount(queueName: string): Promise<number | null> {
@@ -170,10 +170,10 @@ export class BullCacheService {
   }
 
   async setJobCount(queueName: string, count: number): Promise<void> {
-    await this.set(`job_count:${queueName}`, count, { ttl: 60 }); // 1 minuto
+    await this.set(`job_count:${queueName}`, count, { ttl: 60 }); // 1 minute
   }
 
-  // Métodos para limpiar cache específico
+  // Methods to clean specific cache
   async clearJobCache(jobId: string, queueName: string): Promise<void> {
     await this.delete(`job_result:${queueName}:${jobId}`);
   }

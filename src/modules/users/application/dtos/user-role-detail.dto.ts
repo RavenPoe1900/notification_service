@@ -5,7 +5,7 @@ export class UserRoleDetailDto {
   @ApiProperty({
     enum: Role,
     description: 'The specific role assigned to the user.',
-    example: Role.SHIPPER,
+    example: Role.USER,
   })
   role: Role;
 }

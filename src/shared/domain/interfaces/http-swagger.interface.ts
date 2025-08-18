@@ -1,4 +1,4 @@
-import { ApiOperationOptions, ApiResponseOptions } from '@nestjs/swagger';
+import { type ApiOperationOptions, type ApiResponseOptions } from '@nestjs/swagger';
 
 export interface IHttpSwagger {
   apiOperation: ApiOperationOptions;
