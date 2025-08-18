@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { BatchEmailData, EmailTemplateService } from './email-template.service';
+import { BatchEmailData } from '../../domain/types/batch-email-data.types';
+import { EmailTemplateService } from './email-template.service';
 
 export interface EmailNotification {
   subject: string;
@@ -9,7 +10,10 @@ export interface EmailNotification {
 
 @Injectable()
 export class EmailCombinerService {
-  constructor(private readonly emailTemplateService: EmailTemplateService) {}
+  private readonly emailTemplateService: EmailTemplateService
+  constructor(emailTemplateService: EmailTemplateService) {
+    this.emailTemplateService = emailTemplateService;
+  }
 
   combineEmailSubjects(notifications: EmailNotification[]): string {
     if (notifications.length === 0) {
@@ -66,4 +70,4 @@ export class EmailCombinerService {
 
     return recipient;
   }
-} 
+}

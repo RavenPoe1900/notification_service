@@ -7,9 +7,11 @@ import { EmailData, EmailProvider, EmailResult } from '../../domain/interfaces/e
 export class GmailProviderService implements EmailProvider {
   private readonly logger = new Logger(GmailProviderService.name);
   private transporter: nodemailer.Transporter;
+  private readonly configService: ConfigService;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(configService: ConfigService) {
     this.initializeTransporter();
+    this.configService = configService;
   }
 
   private async initializeTransporter() {

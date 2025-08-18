@@ -1,21 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { EMAIL_TEMPLATES } from '../config/email-templates.config';
-
-export interface BatchEmailData {
-  notificationCount: number;
-  notifications: Array<{
-    subject: string;
-    body: string;
-    index: number;
-  }>;
-}
+import { BatchEmailData } from '../../domain/types/batch-email-data.types';
 
 @Injectable()
 export class EmailTemplateService {
   generateBatchEmailTemplate(data: BatchEmailData): string {
     const { notificationCount, notifications } = data;
     const template = EMAIL_TEMPLATES.BATCH_NOTIFICATION;
-    
+
     return `
       <!DOCTYPE html>
       <html lang="en">
@@ -32,7 +24,7 @@ export class EmailTemplateService {
           <div class="header">
             <h2>You have ${notificationCount} new notification${notificationCount > 1 ? 's' : ''}</h2>
           </div>
-          
+
           ${notifications.map(notification => `
             <div class="notification-item">
               <h3>${notification.subject}</h3>
@@ -41,7 +33,7 @@ export class EmailTemplateService {
               </div>
             </div>
           `).join('')}
-          
+
           <div class="footer">
             <p>${template.footerText}</p>
           </div>
@@ -53,7 +45,7 @@ export class EmailTemplateService {
 
   generateSingleEmailTemplate(subject: string, body: string): string {
     const template = EMAIL_TEMPLATES.SINGLE_NOTIFICATION;
-    
+
     return `
       <!DOCTYPE html>
       <html lang="en">
@@ -75,4 +67,4 @@ export class EmailTemplateService {
       </html>
     `;
   }
-} 
+}

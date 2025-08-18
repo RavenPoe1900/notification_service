@@ -23,4 +23,5 @@ export interface BatchProcessingJobData {
   channel: Channel; 
   eventName: string;
   recipient: string;    
+  content: string;
 }

@@ -66,4 +66,18 @@ export class NotificationCommonService extends PrismaGenericService<
       },
     );
   }
+
+  async findBatchNotificationsExceedingWaitTime(maxWaitTime: number): Promise<Notification[]> {
+    const currentTime = new Date();
+    const result = await super.findAll({
+      filter: {
+        type: NotificationType.BATCH,
+        status: NotificationStatus.PENDING,
+        createdAt: {
+          lt: new Date(currentTime.getTime() - maxWaitTime * 1000),
+        },
+      },
+    });
+    return result.data;
+  }
 }

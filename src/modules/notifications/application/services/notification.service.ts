@@ -1,13 +1,24 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { CreateNotificationDto, Channel, NotificationType } from '../dtos/create-notification.dto';
-import { NotificationResponseDto } from '../dtos/notification-response.dto';
+// src/application/services/notification.service.ts
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  CreateNotificationDto,
+  Channel,
+  NotificationType,
+} from '../dtos/create-notification.dto';
+import { NotificationResponseDto, SystemNotificationResponseDto } from '../dtos/notification-response.dto';
 import { PrismaService } from 'nestjs-prisma';
 import { NotificationStatus, Prisma } from '@prisma/client';
 import { PrismaGenericService } from 'src/shared/infrastructure/generic/prisma-generic.service';
 import type { Notification } from '../../domain/types/notification.types';
 import { NotificationJobData } from '../../domain/types/notification-job-data.types';
-import { SystemNotificationResponseDto } from '../dtos/notification-response.dto';
-import { NotificationMapper, SystemNotificationMapper } from '../../infrastructure/mappers/notification.mapper';
+import {
+  NotificationMapper,
+  SystemNotificationMapper,
+} from '../../infrastructure/mappers/notification.mapper';
 import { NotificationQueueService } from '../../infrastructure/services/notification-queue.service';
 import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
 import { NotificationCommonService } from './notification-common.service';
@@ -42,16 +53,25 @@ export class NotificationService extends PrismaGenericService<
     });
   }
 
-  async createNotification(createDto: CreateNotificationDto): Promise<NotificationResponseDto> {
+  /* ───────────────────── CREAR ───────────────────── */
+  async createNotification(
+    createDto: CreateNotificationDto,
+  ): Promise<NotificationResponseDto> {
     this.validateNotificationData(createDto);
 
+    // SYSTEM siempre instantánea
     if (createDto.channel === Channel.SYSTEM) {
       createDto.type = NotificationType.INSTANT;
     }
 
-    const batchKey = createDto.type === NotificationType.BATCH 
-      ? this.generateBatchKey(createDto.eventName, createDto.channel, createDto.emailData?.to)
-      : undefined;
+    const batchKey =
+      createDto.type === NotificationType.BATCH
+        ? this.generateBatchKey(
+            createDto.eventName,
+            createDto.channel,
+            createDto.emailData?.to,
+          )
+        : undefined;
 
     const args: Prisma.NotificationCreateArgs = {
       data: {
@@ -60,6 +80,7 @@ export class NotificationService extends PrismaGenericService<
         type: createDto.type,
         batchKey,
         status: NotificationStatus.PENDING,
+
         email: createDto.emailData
           ? {
               create: {
@@ -67,10 +88,11 @@ export class NotificationService extends PrismaGenericService<
                 subject: createDto.emailData.subject,
                 body: createDto.emailData.body,
                 meta: createDto.emailData.meta,
-                providerUsed: process.env.EMAIL_PROVIDER
+                providerUsed: process.env.EMAIL_PROVIDER,
               },
             }
           : undefined,
+
         system: createDto.systemData
           ? {
               create: {
@@ -95,78 +117,135 @@ export class NotificationService extends PrismaGenericService<
       systemData: createDto.systemData,
     };
 
+    /* Encolar según tipo */
     if (createDto.type === NotificationType.INSTANT) {
       await this.notificationQueueService.addInstantNotification(jobData);
       this.logger.log(`Instant notification ${notification.id} added to queue`);
     } else {
-      const recipient = createDto.emailData?.to || createDto.systemData?.userId.toString() || '';
-      await this.notificationQueueService.addBatchNotification(jobData, batchKey!, recipient);
+      const recipient =
+        createDto.emailData?.to || createDto.systemData?.userId.toString() || '';
+      await this.notificationQueueService.addBatchNotification(
+        jobData,
+        batchKey!,
+        recipient,
+      );
     }
 
     return this.notificationMapper.toDto(notification);
   }
 
+  /* ───────────────────── READ / UNREAD ───────────────────── */
+  async markAsRead(notificationId: number): Promise<SystemNotificationResponseDto> {
+    const notification = await super.update(
+      { where: { id: notificationId } },
+      {
+        where: { id: notificationId },
+        data: { system: { update: { isRead: true, readAt: new Date() } } },
+        include: { system: true },
+      },
+    );
+
+    return this.systemNotificationMapper.toDto(notification);
+  }
+
+  async markAsUnread(
+    notificationId: number,
+  ): Promise<SystemNotificationResponseDto> {
+    const notification = await super.update(
+      { where: { id: notificationId } },
+      {
+        where: { id: notificationId },
+        data: { system: { update: { isRead: false, readAt: null } } },
+        include: { system: true },
+      },
+    );
+
+    return this.systemNotificationMapper.toDto(notification);
+  }
+
+  /* ───────────────────── VALIDACIÓN ───────────────────── */
   private validateNotificationData(createDto: CreateNotificationDto): void {
-    // Validate that email data is provided for EMAIL channel
+    // Regla: SYSTEM nunca BATCH
+    if (
+      createDto.channel === Channel.SYSTEM &&
+      createDto.type === NotificationType.BATCH
+    ) {
+      throw new BadRequestException(
+        'SYSTEM channel notifications cannot be of type BATCH',
+      );
+    }
+
+    // Email requerido para EMAIL
     if (createDto.channel === Channel.EMAIL && !createDto.emailData) {
       throw new BadRequestException('Email data is required for EMAIL channel');
     }
 
-    // Validate that system data is provided for SYSTEM channel
+    // System requerido para SYSTEM
     if (createDto.channel === Channel.SYSTEM && !createDto.systemData) {
       throw new BadRequestException('System data is required for SYSTEM channel');
     }
 
-    // Validate email format if email data is provided
+    // Validación email + campos
     if (createDto.channel === Channel.EMAIL && createDto.emailData) {
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(createDto.emailData.to)) {
         throw new BadRequestException('Invalid email address format');
       }
+      if (!createDto.emailData.subject?.trim()) {
+        throw new BadRequestException('Email subject is required');
+      }
+      if (!createDto.emailData.body?.trim()) {
+        throw new BadRequestException('Email body is required');
+      }
     }
   }
 
-  private generateBatchKey(eventName: string, channel: string, recipient?: string): string {
+  private generateBatchKey(
+    eventName: string,
+    channel: string,
+    recipient?: string,
+  ): string {
     return `${eventName}_${channel}_${recipient || 'system'}`;
   }
 
-  async getSystemNotifications(userId: number): Promise<SystemNotificationResponseDto[]> {
+  /* ───────────────────── LISTAR (pag.) ───────────────────── */
+  async getSystemNotifications(
+    userId: number,
+    {
+      page = 1,
+      pageSize = 20,
+      onlyUnread,
+    }: { page?: number; pageSize?: number; onlyUnread?: boolean } = {},
+  ): Promise<SystemNotificationResponseDto[]> {
+    const where: Prisma.NotificationWhereInput = {
+      system: { userId, deletedAt: null, ...(onlyUnread ? { isRead: false } : {}) },
+    };
+
     const notifications = await super.findAll({
-      filter: {
-        system: {
-          userId,
-          deletedAt: null,
-        },
-      },
-      orderBy: {
-        id: 'desc',
-      },
+      filter: where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { id: 'desc' },
     });
+
     return this.systemNotificationMapper.toDtoArray(notifications.data);
   }
 
+  /* ───────────────────── OTROS helpers ───────────────────── */
   protected get prismaService(): PrismaService {
     return (this as any).model as PrismaService;
   }
 
-  async markAsRead(notificationId: number): Promise<SystemNotificationResponseDto> {
-    const systemNotification = await this.prismaService.systemNotification.update({
-      where: { notificationId },
-      data: { isRead: true, readAt: new Date() },
-    });
-    return {
-      id: systemNotification.id,
-      content: systemNotification.content,
-      isRead: systemNotification.isRead,
-      readAt: systemNotification.readAt,
-      userId: systemNotification.userId,
-      createdAt: new Date(), // Placeholder for missing field
-    };
-  }
-
-  async updateStatus(notificationId: number, status: NotificationStatus, errorMsg?: string): Promise<void> {
-    await this.notificationCommonService.updateStatus(notificationId, status, errorMsg);
+  async updateStatus(
+    notificationId: number,
+    status: NotificationStatus,
+    errorMsg?: string,
+  ): Promise<void> {
+    await this.notificationCommonService.updateStatus(
+      notificationId,
+      status,
+      errorMsg,
+    );
   }
 
   async findPendingBatchNotifications(): Promise<Notification[]> {
@@ -174,42 +253,19 @@ export class NotificationService extends PrismaGenericService<
   }
 
   async findByBatchKey(batchKey: string): Promise<NotificationResponseDto[]> {
-    return await this.notificationCommonService.findByBatchKey(batchKey);
+    return this.notificationCommonService.findByBatchKey(batchKey);
   }
 
   async deleteNotification(notificationId: number): Promise<OperationResultDto> {
-    const findArgs = { where: { id: notificationId } };
-    const deleteArgs = { where: { id: notificationId } };
-
-    await super.remove(findArgs, deleteArgs);
+    await super.remove({ where: { id: notificationId } }, { where: { id: notificationId } });
     return { success: true, message: 'Notification deleted successfully' };
   }
 
-  /**
-   * Get queue statistics
-   */
+  /* Stats / mantenimiento delegados a NotificationQueueService */
   async getQueueStats() {
     return this.notificationQueueService.getQueueStats();
   }
-
-  /**
-   * Clean queue (remove old completed/failed jobs)
-   */
-  async cleanQueue(): Promise<OperationResultDto> {
-    return this.notificationQueueService.cleanQueue();
-  }
-
-  /**
-   * Pause queue processing
-   */
-  async pauseQueue(): Promise<OperationResultDto> {
-    return this.notificationQueueService.pauseQueue();
-  }
-
-  /**
-   * Resume queue processing
-   */
-  async resumeQueue(): Promise<OperationResultDto> {
-    return this.notificationQueueService.resumeQueue();
-  }
+  async cleanQueue()  { return this.notificationQueueService.cleanQueue(); }
+  async pauseQueue()  { return this.notificationQueueService.pauseQueue(); }
+  async resumeQueue() { return this.notificationQueueService.resumeQueue(); }
 }

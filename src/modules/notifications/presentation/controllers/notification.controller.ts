@@ -29,7 +29,10 @@ import { OperationResultDto } from 'src/shared/applications/dtos/operation-resul
 @Controller('notifications')
 @ApiBearerAuth('access-token')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  private readonly notificationService: NotificationService
+  constructor( notificationService: NotificationService) {
+    this.notificationService = notificationService;
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -83,6 +86,14 @@ export class NotificationController {
   @ApiResponseSwagger(updateSwagger(OperationResultDto, 'Notifications'))
   async cleanQueue(): Promise<OperationResult> {
     return this.notificationService.cleanQueue();
+  }
+
+  @Patch('system/:id/unread')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark a system notification as unread' })
+  @ApiResponseSwagger(updateSwagger(SystemNotificationResponseDto, 'Notifications'))
+  async markAsUnread(@Param('id') id: string): Promise<SystemNotificationResponseDto> {
+    return this.notificationService.markAsUnread(Number(id));
   }
 
   @Post('queue/pause')
