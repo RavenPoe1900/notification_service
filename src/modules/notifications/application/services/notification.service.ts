@@ -1,4 +1,3 @@
-// src/application/services/notification.service.ts
 import {
   Injectable,
   Logger,
@@ -9,7 +8,10 @@ import {
   Channel,
   NotificationType,
 } from '../dtos/create-notification.dto';
-import { NotificationResponseDto, SystemNotificationResponseDto } from '../dtos/notification-response.dto';
+import {
+  NotificationResponseDto,
+  SystemNotificationResponseDto,
+} from '../dtos/notification-response.dto';
 import { PrismaService } from 'nestjs-prisma';
 import { NotificationStatus, Prisma } from '@prisma/client';
 import { PrismaGenericService } from 'src/shared/infrastructure/generic/prisma-generic.service';
@@ -53,13 +55,13 @@ export class NotificationService extends PrismaGenericService<
     });
   }
 
-  /* ───────────────────── CREAR ───────────────────── */
+  /* ───────────────────── CREATE ───────────────────── */
   async createNotification(
     createDto: CreateNotificationDto,
   ): Promise<NotificationResponseDto> {
     this.validateNotificationData(createDto);
 
-    // SYSTEM siempre instantánea
+    // SYSTEM notifications are always instant
     if (createDto.channel === Channel.SYSTEM) {
       createDto.type = NotificationType.INSTANT;
     }
@@ -117,7 +119,7 @@ export class NotificationService extends PrismaGenericService<
       systemData: createDto.systemData,
     };
 
-    /* Encolar según tipo */
+    /* Enqueue according to type */
     if (createDto.type === NotificationType.INSTANT) {
       await this.notificationQueueService.addInstantNotification(jobData);
       this.logger.log(`Instant notification ${notification.id} added to queue`);
@@ -163,9 +165,9 @@ export class NotificationService extends PrismaGenericService<
     return this.systemNotificationMapper.toDto(notification);
   }
 
-  /* ───────────────────── VALIDACIÓN ───────────────────── */
+  /* ───────────────────── VALIDATION ───────────────────── */
   private validateNotificationData(createDto: CreateNotificationDto): void {
-    // Regla: SYSTEM nunca BATCH
+    // Rule: SYSTEM can never be BATCH
     if (
       createDto.channel === Channel.SYSTEM &&
       createDto.type === NotificationType.BATCH
@@ -175,17 +177,17 @@ export class NotificationService extends PrismaGenericService<
       );
     }
 
-    // Email requerido para EMAIL
+    // Email data is required for EMAIL channel
     if (createDto.channel === Channel.EMAIL && !createDto.emailData) {
       throw new BadRequestException('Email data is required for EMAIL channel');
     }
 
-    // System requerido para SYSTEM
+    // System data is required for SYSTEM channel
     if (createDto.channel === Channel.SYSTEM && !createDto.systemData) {
       throw new BadRequestException('System data is required for SYSTEM channel');
     }
 
-    // Validación email + campos
+    // Validate email address and required fields
     if (createDto.channel === Channel.EMAIL && createDto.emailData) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(createDto.emailData.to)) {
@@ -208,7 +210,7 @@ export class NotificationService extends PrismaGenericService<
     return `${eventName}_${channel}_${recipient || 'system'}`;
   }
 
-  /* ───────────────────── LISTAR (pag.) ───────────────────── */
+  /* ───────────────────── LIST (pagination) ───────────────────── */
   async getSystemNotifications(
     userId: number,
     {
@@ -231,7 +233,7 @@ export class NotificationService extends PrismaGenericService<
     return this.systemNotificationMapper.toDtoArray(notifications.data);
   }
 
-  /* ───────────────────── OTROS helpers ───────────────────── */
+  /* ───────────────────── OTHER helpers ───────────────────── */
   protected get prismaService(): PrismaService {
     return (this as any).model as PrismaService;
   }
@@ -257,15 +259,16 @@ export class NotificationService extends PrismaGenericService<
   }
 
   async deleteNotification(notificationId: number): Promise<OperationResultDto> {
-    await super.remove({ where: { id: notificationId } }, { where: { id: notificationId } });
+    await super.remove(
+      { where: { id: notificationId } },
+      { where: { id: notificationId } },
+    );
     return { success: true, message: 'Notification deleted successfully' };
   }
 
-  /* Stats / mantenimiento delegados a NotificationQueueService */
-  async getQueueStats() {
-    return this.notificationQueueService.getQueueStats();
-  }
-  async cleanQueue()  { return this.notificationQueueService.cleanQueue(); }
-  async pauseQueue()  { return this.notificationQueueService.pauseQueue(); }
-  async resumeQueue() { return this.notificationQueueService.resumeQueue(); }
+  /* Stats / maintenance delegated to NotificationQueueService */
+  async getQueueStats()  { return this.notificationQueueService.getQueueStats(); }
+  async cleanQueue()     { return this.notificationQueueService.cleanQueue();   }
+  async pauseQueue()     { return this.notificationQueueService.pauseQueue();   }
+  async resumeQueue()    { return this.notificationQueueService.resumeQueue();  }
 }
