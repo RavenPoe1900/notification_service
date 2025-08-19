@@ -30,6 +30,17 @@ enum NotificationStatus {
   ERROR
 }
 
+enum EventName {
+  EVENT_OCCURRED
+  USER_REGISTERED
+  PASSWORD_RESET
+  ORDER_PLACED
+  PAYMENT_FAILED
+  ITEM_SHIPPED
+  COMMENT_ADDED
+  FRIEND_REQUEST
+}
+
 /* ----------------------  USERS ---------------------- */
 model User {
   id            Int                    @id @default(autoincrement())
@@ -85,7 +96,7 @@ model RefreshToken {
 model Notification {
   id          Int                 @id @default(autoincrement())
   batchKey    String?             @db.VarChar(120)
-  eventName   String
+  eventName   EventName
   channel     Channel
   type        NotificationType    @default(INSTANT)
   status      NotificationStatus  @default(PENDING)

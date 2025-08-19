@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { EventName } from '@prisma/client';
 
 export enum Channel {
   EMAIL = 'EMAIL',
@@ -65,11 +66,12 @@ export class SystemDataDto {
 export class CreateNotificationDto {
   @ApiProperty({
     description: 'Name of the event that occurred',
-    example: 'USER_REGISTERED',
+    enum: EventName,
+    example: EventName.USER_REGISTERED,
   })
-  @IsString()
+  @IsEnum(EventName)
   @IsNotEmpty()
-  eventName: string;
+  eventName: EventName;
 
   @ApiProperty({
     description: 'Channel to deliver the notification',

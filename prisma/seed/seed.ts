@@ -1,5 +1,6 @@
 import {
   Channel,
+  EventName,
   NotificationStatus,
   NotificationType,
   PrismaClient,
@@ -69,7 +70,7 @@ async function main() {
   /* ------- NOTIFICATIONS -------------- */
   await prisma.notification.create({
     data: {
-      eventName: 'WelcomeEmail',
+      eventName: EventName.EVENT_OCCURRED,
       channel: Channel.EMAIL,
       type: NotificationType.INSTANT,
       status: NotificationStatus.PENDING,
@@ -87,7 +88,7 @@ async function main() {
 
   await prisma.notification.create({
     data: {
-      eventName: 'NewFeatureAnnouncement',
+      eventName: EventName.EVENT_OCCURRED,
       channel: Channel.SYSTEM,
       type: NotificationType.INSTANT,
       status: NotificationStatus.SENT,
@@ -103,7 +104,7 @@ async function main() {
   await prisma.notification.create({
     data: {
       batchKey: 'weekly_digest_2025_08_08',
-      eventName: 'WeeklyDigest',
+      eventName: EventName.PAYMENT_FAILED,
       channel: Channel.EMAIL,
       type: NotificationType.BATCH,
       status: NotificationStatus.PENDING,
@@ -120,7 +121,7 @@ async function main() {
 
   await prisma.notification.create({
     data: {
-      eventName: 'FailedLoginAttempt',
+      eventName: EventName.ORDER_PLACED,
       channel: Channel.EMAIL,
       type: NotificationType.INSTANT,
       status: NotificationStatus.ERROR,
