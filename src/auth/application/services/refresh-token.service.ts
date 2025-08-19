@@ -79,18 +79,20 @@ export class RefreshTokenService {
     );
   }
 
-  /**
-   * Cleans up expired refresh tokens
-   */
-  async cleanupExpiredTokens(): Promise<void> {
-    await this.prisma.refreshToken.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
-        },
-      },
-    });
-  }
+/**
+ * Deletes all expired OR revoked tokens and returns the row count.
+ */
+async cleanupExpiredTokens(): Promise<number> {
+  const { count } = await this.prisma.refreshToken.deleteMany({
+    where: {
+      OR: [
+        { expiresAt: { lt: new Date() } }, // expired
+        { revokedAt: { not: null } },      // already revoked
+      ],
+    },
+  });
+  return count;
+}
 
   /**
    * Generates a cryptographically secure random token
