@@ -49,7 +49,7 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
       job.data.keyProcessor = getAllQueueJobData[key].keyProcessor;
       job.data.batchKey = getAllQueueJobData[key].batchKey;
       job.data.recipient = getAllQueueJobData[key].recipient;
-      await this.queue.add('batch-notification', job.data);
+      await this.queue.add('batch-notification', job.data, { priority: 1 });
     }
   }
 
@@ -144,7 +144,7 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
       } 
       else{
         job.data.keyProcessor = key;
-        await this.queue.add('batch-notification', job.data);
+        await this.queue.add('batch-notification', job.data, { priority: 1 });
       }}
       console.log(queueJobData.count)
   }

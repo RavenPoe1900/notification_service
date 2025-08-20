@@ -16,6 +16,7 @@ export class NotificationQueueService implements OnModuleInit{
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: true,
       removeOnFail: false,
+      priority: 3,
     });
   }
 
@@ -38,6 +39,7 @@ export class NotificationQueueService implements OnModuleInit{
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: true,
       removeOnFail: false,
+      priority: 4,
     });
   }
 
@@ -50,6 +52,7 @@ export class NotificationQueueService implements OnModuleInit{
           every: parseInt(process.env.BATCH_MAX_WAIT_TIME) * 60000,
         },
         jobId: 'recurring-batch-processor',
+        priority: 2,
       },
     );
   }
