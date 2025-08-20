@@ -5,7 +5,6 @@ import { NotificationStatus } from '@prisma/client';
 import { EmailProviderFactory } from '../email/email-provider.factory';
 import { NotificationCommonService } from '../../application/services/notification-common.service';
 import { EmailTemplateService } from '../services/email-template.service';
-
 import type {
   NotificationJobData,
   BatchProcessingJobData,
@@ -37,10 +36,23 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
         return this.handleBatch(job as Job<BatchProcessingJobData>);
       case 'scheduled-batch':
         return this.handleScheduled(job as Job<BatchProcessingJobData>);
+      case 'process-pending-batches':
+        return this.processPendingBatches(job as Job<BatchProcessingJobData>);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
     }
   }
+
+  private async processPendingBatches(job: Job<BatchProcessingJobData>): Promise<void> {
+    const getAllQueueJobData: Record<string, QueueJobData> = await this.getAllQueueJobData();
+    for (const key in getAllQueueJobData) {
+      job.data.keyProcessor = getAllQueueJobData[key].keyProcessor;
+      job.data.batchKey = getAllQueueJobData[key].batchKey;
+      job.data.recipient = getAllQueueJobData[key].recipient;
+      await this.queue.add('batch-notification', job.data);
+    }
+  }
+
 
   private async handleInstant(job: Job<NotificationJobData>): Promise<void> {
     const { notificationId, channel, emailData } = job.data;
@@ -104,13 +116,16 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
   }
 
   private async handleScheduled(job: Job<BatchProcessingJobData>): Promise<void> {
-    const { batchKey, jobData } = job.data;
+    const { batchKey, jobData, recipient } = job.data;
     this.logger.log(`Timed batch triggered for ${batchKey}`);
 
     const key: string = this.makeUniqueKey(jobData.eventName, jobData.channel, jobData.emailData.to);
     let queueJobData: QueueJobData | null = await this.getKeyValue(key);
     if(!queueJobData) {
       queueJobData ={
+        recipient: recipient,
+        batchKey: batchKey,
+        keyProcessor: key,
         subject: [jobData.emailData?.subject ?? 'No subject'],
         body: [jobData.emailData?.body ?? jobData.systemData?.content ?? ''],
         notificationIds:[jobData.notificationId],
@@ -148,10 +163,28 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
   }
 
   async getKeyValue(key: string): Promise<QueueJobData | null> {
-  const value = await this.redisClient.get(key);
-  if (!value) return null;
-  return JSON.parse(value) as QueueJobData;
-}
+    const value = await this.redisClient.get(key);
+    if (!value) return null;
+    return JSON.parse(value) as QueueJobData;
+  }
+
+  async getAllQueueJobData(): Promise<Record<string, QueueJobData>> {
+    const pattern = '*::*::*';
+    const keys = await this.redisClient.keys(pattern);
+    const result: Record<string, QueueJobData> = {};
+
+    for (const key of keys) {
+      const value = await this.redisClient.get(key);
+      if (value) {
+        try {
+          result[key] = JSON.parse(value) as QueueJobData;
+        } catch (err) {
+          console.warn(`Failed to parse data for key: ${key}`, err);
+        }
+      }
+    }
+    return result;
+  }
 
   async deleteKey(key: string): Promise<void> {
     await this.redisClient.del(key);

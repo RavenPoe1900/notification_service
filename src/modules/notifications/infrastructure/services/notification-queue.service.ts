@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { NotificationJobData, BatchProcessingJobData } from '../../domain/types/notification-job-data.types';
 import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
 
 @Injectable()
-export class NotificationQueueService {
+export class NotificationQueueService implements OnModuleInit{
   constructor(
     @InjectQueue('notifications') private readonly queue: Queue,
   ) {}
@@ -39,6 +39,19 @@ export class NotificationQueueService {
       removeOnComplete: true,
       removeOnFail: false,
     });
+  }
+
+  async onModuleInit() {
+    await this.queue.add(
+      'process-pending-batches',
+      {},
+      {
+        repeat: {
+          every: parseInt(process.env.BATCH_MAX_WAIT_TIME) * 60000,
+        },
+        jobId: 'recurring-batch-processor',
+      },
+    );
   }
 
   async getQueueStats() {

@@ -26,8 +26,11 @@ export interface BatchProcessingJobData {
   keyProcessor: string;
 }
 export interface QueueJobData {
+  keyProcessor: string,
+  recipient: string,
+  batchKey: string,
   subject:string[];
-  body:string[];
-  notificationIds:number[];
+  body: string[];
+  notificationIds: number[];
   count: number;
 }
