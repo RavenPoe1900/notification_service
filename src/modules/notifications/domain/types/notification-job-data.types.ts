@@ -1,12 +1,12 @@
-import { Channel, NotificationType } from '@prisma/client';
+import { Channel, EventName, NotificationType } from '@prisma/client';
 
 export interface NotificationJobData {
   notificationId: number;
-  eventName: string;
+  eventName: EventName;
   channel: Channel; 
   type: NotificationType;     
   batchKey?: string;
-  emailData?: {
+  emailData: {
     to: string;
     subject: string;
     body: string;
@@ -20,8 +20,14 @@ export interface NotificationJobData {
 
 export interface BatchProcessingJobData {
   batchKey: string;
-  channel: Channel; 
-  eventName: string;
+  jobData: NotificationJobData,
   recipient: string;    
   content: string;
+  keyProcessor: string;
+}
+export interface QueueJobData {
+  subject:string[];
+  body:string[];
+  notificationIds:number[];
+  count: number;
 }

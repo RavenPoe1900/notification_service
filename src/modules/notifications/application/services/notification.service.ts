@@ -55,15 +55,19 @@ export class NotificationService extends PrismaGenericService<
     });
   }
 
-  /* ───────────────────── CREATE ───────────────────── */
   async createNotification(
     createDto: CreateNotificationDto,
   ): Promise<NotificationResponseDto> {
     this.validateNotificationData(createDto);
 
-    // SYSTEM notifications are always instant
     if (createDto.channel === Channel.SYSTEM) {
       createDto.type = NotificationType.INSTANT;
+    }
+
+    if (createDto.type === NotificationType.INSTANT && createDto.channel === Channel.EMAIL) {
+      if (!createDto.emailData?.to) {
+        throw new BadRequestException('Missing recipient for instant email');
+      }
     }
 
     const batchKey =
@@ -71,7 +75,7 @@ export class NotificationService extends PrismaGenericService<
         ? this.generateBatchKey(
             createDto.eventName,
             createDto.channel,
-            createDto.emailData?.to,
+            createDto.emailData?.to ?? createDto.systemData?.userId?.toString(),
           )
         : undefined;
 
@@ -82,7 +86,6 @@ export class NotificationService extends PrismaGenericService<
         type: createDto.type,
         batchKey,
         status: NotificationStatus.PENDING,
-
         email: createDto.emailData
           ? {
               create: {
@@ -94,7 +97,6 @@ export class NotificationService extends PrismaGenericService<
               },
             }
           : undefined,
-
         system: createDto.systemData
           ? {
               create: {
@@ -105,6 +107,7 @@ export class NotificationService extends PrismaGenericService<
             }
           : undefined,
       },
+      include: { email: true, system: true },
     };
 
     const notification = await super.create(args);
@@ -119,24 +122,29 @@ export class NotificationService extends PrismaGenericService<
       systemData: createDto.systemData,
     };
 
-    /* Enqueue according to type */
     if (createDto.type === NotificationType.INSTANT) {
       await this.notificationQueueService.addInstantNotification(jobData);
       this.logger.log(`Instant notification ${notification.id} added to queue`);
     } else {
       const recipient =
-        createDto.emailData?.to || createDto.systemData?.userId.toString() || '';
+        createDto.emailData?.to ??
+        (createDto.systemData?.userId != null ? String(createDto.systemData.userId) : '');
+      if (!recipient) {
+        this.logger.error(`Batch notification missing recipient for event ${createDto.eventName}`);
+        await this.updateStatus(notification.id, NotificationStatus.ERROR, 'Missing recipient for batch notification');
+        return this.notificationMapper.toDto(notification);
+      }
       await this.notificationQueueService.addBatchNotification(
         jobData,
         batchKey!,
         recipient,
       );
+      this.logger.log(`Batch notification ${notification.id} added to queue with key ${batchKey}`);
     }
 
     return this.notificationMapper.toDto(notification);
   }
 
-  /* ───────────────────── READ / UNREAD ───────────────────── */
   async markAsRead(notificationId: number): Promise<SystemNotificationResponseDto> {
     const notification = await super.update(
       { where: { id: notificationId } },
@@ -146,13 +154,10 @@ export class NotificationService extends PrismaGenericService<
         include: { system: true },
       },
     );
-
     return this.systemNotificationMapper.toDto(notification);
   }
 
-  async markAsUnread(
-    notificationId: number,
-  ): Promise<SystemNotificationResponseDto> {
+  async markAsUnread(notificationId: number): Promise<SystemNotificationResponseDto> {
     const notification = await super.update(
       { where: { id: notificationId } },
       {
@@ -161,33 +166,19 @@ export class NotificationService extends PrismaGenericService<
         include: { system: true },
       },
     );
-
     return this.systemNotificationMapper.toDto(notification);
   }
 
-  /* ───────────────────── VALIDATION ───────────────────── */
   private validateNotificationData(createDto: CreateNotificationDto): void {
-    // Rule: SYSTEM can never be BATCH
-    if (
-      createDto.channel === Channel.SYSTEM &&
-      createDto.type === NotificationType.BATCH
-    ) {
-      throw new BadRequestException(
-        'SYSTEM channel notifications cannot be of type BATCH',
-      );
+    if (createDto.channel === Channel.SYSTEM && createDto.type === NotificationType.BATCH) {
+      throw new BadRequestException('SYSTEM channel notifications cannot be of type BATCH');
     }
-
-    // Email data is required for EMAIL channel
     if (createDto.channel === Channel.EMAIL && !createDto.emailData) {
       throw new BadRequestException('Email data is required for EMAIL channel');
     }
-
-    // System data is required for SYSTEM channel
     if (createDto.channel === Channel.SYSTEM && !createDto.systemData) {
       throw new BadRequestException('System data is required for SYSTEM channel');
     }
-
-    // Validate email address and required fields
     if (createDto.channel === Channel.EMAIL && createDto.emailData) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(createDto.emailData.to)) {
@@ -210,7 +201,6 @@ export class NotificationService extends PrismaGenericService<
     return `${eventName}_${channel}_${recipient || 'system'}`;
   }
 
-  /* ───────────────────── LIST (pagination) ───────────────────── */
   async getSystemNotifications(
     userId: number,
     {
@@ -228,12 +218,12 @@ export class NotificationService extends PrismaGenericService<
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { id: 'desc' },
+      include: { system: true },
     });
 
     return this.systemNotificationMapper.toDtoArray(notifications.data);
   }
 
-  /* ───────────────────── OTHER helpers ───────────────────── */
   protected get prismaService(): PrismaService {
     return (this as any).model as PrismaService;
   }
@@ -251,11 +241,13 @@ export class NotificationService extends PrismaGenericService<
   }
 
   async findPendingBatchNotifications(): Promise<Notification[]> {
-    return this.notificationCommonService.findPendingBatchNotifications();
+    return this.notificationCommonService.findPendingBatchNotifications("sd");
   }
 
+  // FIX: mapear a DTO para cumplir el tipo NotificationResponseDto[]
   async findByBatchKey(batchKey: string): Promise<NotificationResponseDto[]> {
-    return this.notificationCommonService.findByBatchKey(batchKey);
+    const notifications = await this.notificationCommonService.findByBatchKey(batchKey);
+    return this.notificationMapper.toDtoArray(notifications);
   }
 
   async deleteNotification(notificationId: number): Promise<OperationResultDto> {
@@ -266,9 +258,8 @@ export class NotificationService extends PrismaGenericService<
     return { success: true, message: 'Notification deleted successfully' };
   }
 
-  /* Stats / maintenance delegated to NotificationQueueService */
   async getQueueStats()  { return this.notificationQueueService.getQueueStats(); }
-  async cleanQueue()     { return this.notificationQueueService.cleanQueue();   }
-  async pauseQueue()     { return this.notificationQueueService.pauseQueue();   }
-  async resumeQueue()    { return this.notificationQueueService.resumeQueue();  }
+  async cleanQueue(): Promise<OperationResultDto> { return this.notificationQueueService.cleanQueue(); }
+  async pauseQueue(): Promise<OperationResultDto> { return this.notificationQueueService.pauseQueue(); }
+  async resumeQueue(): Promise<OperationResultDto> { return this.notificationQueueService.resumeQueue(); }
 }

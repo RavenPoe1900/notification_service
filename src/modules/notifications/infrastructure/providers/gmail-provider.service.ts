@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import { EmailData, EmailProvider, EmailResult } from '../../domain/interfaces/email-provider.interface';
+import { EmailProvider, EmailResult } from '../../domain/interfaces/email-provider.interface';
+import type { Notification } from '../../domain/types/notification.types';
 
 @Injectable()
 export class GmailProviderService implements EmailProvider, OnModuleInit {
@@ -104,13 +105,14 @@ export class GmailProviderService implements EmailProvider, OnModuleInit {
    * Sends a batch of emails by iterating over the list and invoking sendEmail.
    * Returns an array of results with success/error info for each item.
    */
-  async sendBatchEmail(emails: EmailData[]): Promise<EmailResult[]> {
-    const results: EmailResult[] = [];
-    for (const email of emails) {
-      results.push(await this.sendEmail(email.to, email.subject, email.body, email.meta));
+  async sendBatchEmail(emails: Notification[]): Promise<EmailResult[]> {
+      const results: EmailResult[] = [];
+      for (const email of emails) {
+        const result = await this.sendEmail(email.email.to, email.email.subject, email.email.body, email.email.meta);
+        results.push(result);
+      }
+      return results;
     }
-    return results;
-  }
 
   /**
    * Verifies the current transporter connection and credentials.

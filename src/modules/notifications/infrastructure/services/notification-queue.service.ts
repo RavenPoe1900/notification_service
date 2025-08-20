@@ -1,153 +1,64 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { ConfigService } from '@nestjs/config';
-import {
-  BatchProcessingJobData,
-  NotificationJobData,
-} from '../../domain/types/notification-job-data.types';
-import { OperationResult } from '../../domain/types/notification.types';
-import { NotificationCommonService } from '../../application/services/notification-common.service';
-import { EmailTemplateService } from './email-template.service';
-import { buildBatchContent } from 'src/shared/utils/notification-content.util';
-import { BaseQueueService } from 'src/shared/infrastructure/bull/base-queue.service';
+import type { NotificationJobData, BatchProcessingJobData } from '../../domain/types/notification-job-data.types';
+import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
 
 @Injectable()
-export class NotificationQueueService extends BaseQueueService {
+export class NotificationQueueService {
   constructor(
-    @InjectQueue('notifications') queue: Queue,
-    private readonly config: ConfigService,
-    private readonly notificationCommonService: NotificationCommonService,
-    private readonly emailTemplateService: EmailTemplateService,
-  ) {
-    super(queue, NotificationQueueService.name);
-    this.scheduleBatchProcessing();
-  }
+    @InjectQueue('notifications') private readonly queue: Queue,
+  ) {}
 
-  /** Schedule a repeatable batch-processing job (idempotent) */
-  private async scheduleBatchProcessing(): Promise<void> {
-    const maxWait = this.config.get<number>('BATCH_MAX_WAIT_TIME', 7200);
-    const everyMs = maxWait * 1000;
-
-    await this.upsertRepeatableJob('scheduled-batch', { every: everyMs });
-  }
-
-  /** Queue an instant notification job */
-  async addInstantNotification(data: NotificationJobData): Promise<string> {
-    const job = await this.queue.add('instant-notification', data, {
+  async addInstantNotification(jobData: NotificationJobData) {
+    await this.queue.add('instant-notification', jobData, {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: 100,
-      removeOnFail: 50,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: true,
+      removeOnFail: false,
     });
-    this.logger.log(`📨 Instant notification queued: ${job.id}`);
-    return job.id as string;
   }
 
-  /** Handle batch notification jobs */
   async addBatchNotification(
-    data: NotificationJobData,
+    jobData: NotificationJobData,
     batchKey: string,
-    recipient: string,
-  ): Promise<{ jobId: string; scheduledJobId?: string }> {
-    const batchSize = this.config.get<number>('BATCH_MAX_SIZE', 5);
-    const maxWait = this.config.get<number>('BATCH_MAX_WAIT_TIME', 7200);
-
-    const existing = await this.notificationCommonService.findByBatchKey(batchKey);
-    const scheduled: { jobId?: string } = {};
-
-    // First notification → schedule a delayed job
-    if (!existing.length) {
-      const timeoutJob = await this.queue.add(
-        'scheduled-batch',
-        { batchKey, channel: data.channel, eventName: data.eventName, recipient } as BatchProcessingJobData,
-        {
-          delay: maxWait * 1000,
-          attempts: 1,
-          removeOnComplete: 50,
-          removeOnFail: 25,
-        },
-      );
-      scheduled.jobId = timeoutJob.id as string;
-      this.logger.log(`🕒 Batch ${batchKey} scheduled in ${maxWait}s`);
-    }
-
-    // Launch batch immediately if size limit reached
-    if (existing.length + 1 >= batchSize) {
-      const notificationsToCombine = [...existing, data];
-
-      let htmlCombined: string;
-      if (data.channel === 'EMAIL') {
-        htmlCombined = this.emailTemplateService.generateBatchEmailTemplate({
-          notificationCount: notificationsToCombine.length,
-          notifications: notificationsToCombine.map((n, i) => ({
-            subject: n.emailData?.subject ?? 'No subject',
-            body: n.emailData?.body ?? '',
-            index: i,
-          })),
-        });
-      } else {
-        htmlCombined = buildBatchContent(notificationsToCombine);
-      }
-
-      const batchJob = await this.queue.add(
-        'batch-notification',
-        {
-          batchKey,
-          channel: data.channel,
-          eventName: data.eventName,
-          recipient,
-          content: htmlCombined,
-        } as BatchProcessingJobData,
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        },
-      );
-      this.logger.log(
-        `📦 Batch ${batchKey} launched (size limit) – job ${batchJob.id}`,
-      );
-      return { jobId: batchJob.id as string, scheduledJobId: scheduled.jobId };
-    }
-
-    // Still waiting
-    return { jobId: 'pending', scheduledJobId: scheduled.jobId };
-  }
-
-  /** Monitoring utils */
-  async getQueueStats() {
-    const [waiting, active, completed, failed] = await Promise.all([
-      this.queue.getWaiting(),
-      this.queue.getActive(),
-      this.queue.getCompleted(),
-      this.queue.getFailed(),
-    ]);
-    return {
-      waiting: waiting.length,
-      active: active.length,
-      completed: completed.length,
-      failed: failed.length,
+    recipient: string
+  ) {
+    const payload: BatchProcessingJobData = {
+      batchKey,
+      jobData: jobData,
+      recipient,
+      content: '',
+      keyProcessor: '',
     };
+
+    await this.queue.add('scheduled-batch', payload, {
+      delay: 0,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    });
   }
 
-  async cleanQueue(): Promise<OperationResult> {
-    await this.queue.clean(24 * 60 * 60 * 1000, 'completed' as any);
-    await this.queue.clean(24 * 60 * 60 * 1000, 'failed' as any);
-    this.logger.log('🧹 Queue cleaned');
-    return { success: true, message: 'Queue cleaned successfully' };
+  async getQueueStats() {
+    return this.queue.getJobCounts();
   }
 
-  async pauseQueue(): Promise<OperationResult> {
+  // FIX: devolver OperationResultDto para que el controller compile
+  async cleanQueue(): Promise<OperationResultDto> {
+    await this.queue.clean(1000, 100, 'completed');
+    await this.queue.clean(1000, 100, 'failed');
+    return { success: true, message: 'Queue cleaned' };
+  }
+
+  async pauseQueue(): Promise<OperationResultDto> {
     await this.queue.pause();
-    this.logger.log('⏸️ Queue paused');
-    return { success: true, message: 'Queue paused successfully' };
+    return { success: true, message: 'Queue paused' };
   }
 
-  async resumeQueue(): Promise<OperationResult> {
+  async resumeQueue(): Promise<OperationResultDto> {
     await this.queue.resume();
-    this.logger.log('▶️ Queue resumed');
-    return { success: true, message: 'Queue resumed successfully' };
+    return { success: true, message: 'Queue resumed' };
   }
 }

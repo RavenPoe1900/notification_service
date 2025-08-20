@@ -1,83 +1,54 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
-import { PrismaGenericService } from 'src/shared/infrastructure/generic/prisma-generic.service';
+import { NotificationStatus, NotificationType } from '@prisma/client';
 import type { Notification } from '../../domain/types/notification.types';
-import { Prisma, NotificationStatus } from '@prisma/client';
-import { NotificationType } from '../dtos/create-notification.dto';
-import { notificationArgs } from '../../infrastructure/prisma/notification.select';
-import { NotificationResponseDto } from '../dtos/notification-response.dto';
-import { NotificationMapper } from '../../infrastructure/mappers/notification.mapper';
 
 @Injectable()
-export class NotificationCommonService extends PrismaGenericService<
-  Notification,
-  Prisma.NotificationCreateArgs,
-  Prisma.NotificationFindManyArgs,
-  Prisma.NotificationFindUniqueArgs,
-  Prisma.NotificationUpdateArgs,
-  Prisma.NotificationDeleteArgs
-> {
-  constructor(
-    prismaService: PrismaService,
-    private readonly notificationMapper: NotificationMapper,
-    ) {
-    super(prismaService.notification, {
-      modelName: 'Notification',
-      errorDictionary: {
-        Notification: {
-          unique: {
-            eventName: 'A notification with this event name already exists.',
-          },
-        },
+export class NotificationCommonService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async updateStatus(notificationId: number, status: NotificationStatus, errorMsg?: string) {
+    await this.prisma.notification.update({
+      where: { id: notificationId },
+      data: {
+        status,
+        errorMsg: errorMsg ?? null,
       },
     });
   }
 
-  async findPendingBatchNotifications(): Promise<Notification[]> {
-    const result = await super.findAll({
-      filter: {
+  // Importante: incluye relaciones y filtra por tipo y estado
+  async findByBatchKey(batchKey: string) {
+    return this.prisma.notification.findMany({
+      where: {
+        batchKey,
         type: NotificationType.BATCH,
         status: NotificationStatus.PENDING,
-        batchKey: { not: null },
       },
+      include: {
+        email: true,
+        system: true,
+      },
+      orderBy: { id: 'asc' },
     });
-    return result.data;
   }
 
- async findByBatchKey(batchKey: string): Promise<NotificationResponseDto[]> {
-    const find = (await super.findAll({
-      where: { batchKey: batchKey as any },
-      ...notificationArgs,
-    })).data;
-
-    return this.notificationMapper.toDtoArray(find);
-  }
-
-  async updateStatus(notificationId: number, status: NotificationStatus, errorMsg?: string): Promise<void> {
-    await super.update(
-      { where: { id: notificationId } },
-      {
-        where: { id: notificationId },
-        data: {
-          status,
-          errorMsg,
-          processedAt: status === NotificationStatus.SENT ? new Date() : undefined,
-        },
-      },
-    );
-  }
-
-  async findBatchNotificationsExceedingWaitTime(maxWaitTime: number): Promise<Notification[]> {
-    const currentTime = new Date();
-    const result = await super.findAll({
-      filter: {
+  async findPendingBatchNotifications(email: string): Promise<Notification[]> {
+    return this.prisma.notification.findMany({
+      where: {
         type: NotificationType.BATCH,
         status: NotificationStatus.PENDING,
-        createdAt: {
-          lt: new Date(currentTime.getTime() - maxWaitTime * 1000),
-        },
+        email:{
+          is:{
+            to: email
+          }
+        }
       },
+      include: {
+        email: true,
+        system: true,
+      },
+      orderBy: { id: 'asc' },
     });
-    return result.data;
   }
 }

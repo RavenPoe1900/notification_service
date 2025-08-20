@@ -1,21 +1,21 @@
 import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
-import { Queue, Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
-
+import { Queue, Job, RedisClient } from 'bullmq';
+import { Logger, OnModuleInit } from '@nestjs/common';
+import { NotificationStatus } from '@prisma/client';
 import { EmailProviderFactory } from '../email/email-provider.factory';
 import { NotificationCommonService } from '../../application/services/notification-common.service';
-import { NotificationStatus } from '@prisma/client';
 import { EmailTemplateService } from '../services/email-template.service';
 
 import type {
   NotificationJobData,
   BatchProcessingJobData,
+  QueueJobData,
 } from '../../domain/types/notification-job-data.types';
 
 @Processor('notifications')
-export class NotificationProcessor extends WorkerHost {
+export class NotificationProcessor extends WorkerHost implements OnModuleInit{
   private readonly logger = new Logger(NotificationProcessor.name);
-
+  private redisClient: RedisClient; 
   constructor(
     private readonly emailFactory: EmailProviderFactory,
     private readonly notificationCommon: NotificationCommonService,
@@ -23,6 +23,10 @@ export class NotificationProcessor extends WorkerHost {
     @InjectQueue('notifications') private readonly queue: Queue,
   ) {
     super();
+  }
+
+  async onModuleInit() {
+    this.redisClient = await this.queue.client;
   }
 
   override async process(job: Job<unknown>): Promise<void> {
@@ -41,8 +45,11 @@ export class NotificationProcessor extends WorkerHost {
   private async handleInstant(job: Job<NotificationJobData>): Promise<void> {
     const { notificationId, channel, emailData } = job.data;
     try {
-      if (channel === 'EMAIL' && emailData) {
-        const provider = this.emailFactory.getProvider();
+      if (channel === 'EMAIL') {
+        if (!emailData?.to) {
+          throw new Error('Instant email missing recipient');
+        }
+      const provider = this.emailFactory.getProvider();
         const result = await provider.sendEmail(
           emailData.to,
           emailData.subject,
@@ -63,16 +70,27 @@ export class NotificationProcessor extends WorkerHost {
   }
 
   private async handleBatch(job: Job<BatchProcessingJobData>): Promise<void> {
-    const { batchKey, recipient, channel, content } = job.data;
+    const { batchKey, recipient, keyProcessor } = job.data;
     try {
-      if (channel === 'EMAIL') {
-        const provider = this.emailFactory.getProvider();
-        await provider.sendEmail(recipient, `Batch: ${batchKey}`, content);
+      const queueJobData: QueueJobData | null = await this.getKeyValue(keyProcessor);
+      if (!queueJobData) {
+        throw new Error('No data found for batch key');
       }
-      const batch = await this.notificationCommon.findByBatchKey(batchKey);
-      await Promise.all(batch.map(n =>
-        this.notificationCommon.updateStatus(n.id, NotificationStatus.SENT),
+
+      const content = this.emailTemplateService.generateBatchEmailTemplate({
+        notificationCount: queueJobData.count,
+        notifications: queueJobData.subject.map((subject, i) => ({
+          subject,
+          body: queueJobData.body[i] ?? '',
+          index: i,
+        })),
+      });
+      const provider = this.emailFactory.getProvider();
+      await provider.sendEmail(recipient, `Batch: ${batchKey}`, content);
+      await Promise.all(queueJobData.notificationIds.map(n =>
+        this.notificationCommon.updateStatus(n, NotificationStatus.SENT),
       ));
+      this.deleteKey(job.data.keyProcessor);
     } catch (err) {
       const batch = await this.notificationCommon.findByBatchKey(batchKey);
       await Promise.all(batch.map(n =>
@@ -82,37 +100,68 @@ export class NotificationProcessor extends WorkerHost {
           (err as Error).message,
         ),
       ));
-      throw err;
     }
   }
 
   private async handleScheduled(job: Job<BatchProcessingJobData>): Promise<void> {
-    const { batchKey } = job.data;
+    const { batchKey, jobData } = job.data;
     this.logger.log(`Timed batch triggered for ${batchKey}`);
 
-    const pending = await this.notificationCommon.findByBatchKey(batchKey);
-    if (!pending.length) return;
-
-    let content: string;
-    if (pending[0].channel === 'EMAIL') {
-      content = this.emailTemplateService.generateBatchEmailTemplate({
-        notificationCount: pending.length,
-        notifications: pending.map((n, i) => ({
-          subject: n.email?.subject ?? 'No subject',
-          body: n.email?.body ?? n.system?.content ?? '',
-          index: i,
-        })),
-      });
-    } else {
-      content = `<ul>${pending.map(n => `<li>${n.system?.content}</li>`).join('')}</ul>`;
+    const key: string = this.makeUniqueKey(jobData.eventName, jobData.channel, jobData.emailData.to);
+    let queueJobData: QueueJobData | null = await this.getKeyValue(key);
+    if(!queueJobData) {
+      queueJobData ={
+        subject: [jobData.emailData?.subject ?? 'No subject'],
+        body: [jobData.emailData?.body ?? jobData.systemData?.content ?? ''],
+        notificationIds:[jobData.notificationId],
+        count: 1
+      }
+      await this.setKeyValue(key,queueJobData);
     }
+    else {
+      const numericValue = Number(queueJobData.count);
+      queueJobData.subject.push(jobData.emailData?.subject ?? 'No subject');
+      queueJobData.body.push(jobData.emailData?.body ?? jobData.systemData?.content ?? '');
+      queueJobData.notificationIds.push(jobData.notificationId);
+      queueJobData.count = queueJobData.count+1
+      if(numericValue < Number(process.env.BATCH_MAX_SIZE)){
+        await this.setKeyValue(key,queueJobData);
+      } 
+      else{
+        job.data.keyProcessor = key;
+        await this.queue.add('batch-notification', job.data);
+      }}
+      console.log(queueJobData.count)
+  }
 
-    await this.queue.add('batch-notification', {
-      batchKey,
-      eventName: pending[0].eventName,
-      channel: pending[0].channel,
-      recipient: pending[0].email?.to ?? String(pending[0].system?.userId),
-      content,
-    } as BatchProcessingJobData);
+  makeUniqueKey(eventName: string, channel: string, email: string): string {
+    return `${eventName}::${channel}::${email.toLowerCase()}`;
+  }
+
+  parseUniqueKey(key: string): UniqueKeyParts {
+    const [eventName, channel, email] = key.split('::');
+    return { eventName, channel, email };
+  }
+
+  async setKeyValue(key: string, value: QueueJobData): Promise<void> {
+    await this.redisClient.set(key, JSON.stringify(value));
+  }
+
+  async getKeyValue(key: string): Promise<QueueJobData | null> {
+  const value = await this.redisClient.get(key);
+  if (!value) return null;
+  return JSON.parse(value) as QueueJobData;
+}
+
+  async deleteKey(key: string): Promise<void> {
+    await this.redisClient.del(key);
+  }
+
+  async deleteAllKeys(): Promise<void> {
+    const pattern = '*::*::*';
+    const keys = await this.redisClient.keys(pattern);
+    if (keys.length > 0) {
+      await this.redisClient.del(keys);
+    }
   }
 }
