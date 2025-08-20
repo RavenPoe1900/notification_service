@@ -1,99 +1,156 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+<!-- Optional – add your own logo -->
+<!-- <p align="center"><img src="docs/logo.png" width="180" alt="Notification Service logo" /></p> -->
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+# 📣 Notification Service
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+![language](https://img.shields.io/badge/language-TypeScript-blue?style=flat-square)
+![build](https://img.shields.io/github/actions/workflow/status/your-org/notification-service/ci.yml?label=build&style=flat-square)
+![license](https://img.shields.io/github/license/your-org/notification-service?style=flat-square)
 
-## Description
+A **NestJS + Prisma + BullMQ** micro-service that receives HTTP requests and delivers notifications **via Email** or the **System feed** (database).  
+Built with **Domain-Driven Design (DDD)** and **Clean Architecture** to be extensible (plug-in email providers), efficient (batch processing) and secure (JWT).
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## 📑 Table of Contents
+
+1. [Features](#-features)  
+2. [Architecture](#-architecture)  
+3. [Environment Variables](#-environment-variables)  
+4. [System Requirements](#-system-requirements)  
+5. [Quick Start](#-quick-start)  
+6. [Key Endpoints](#-key-endpoints)  
+7. [Batch-Processing Flow](#-batch-processing-flow)  
+8. [Adding New Email Providers](#-adding-new-email-providers)  
+9. [Testing](#-testing)  
+10. [Contributing](#-contributing)  
+11. [License](#-license)
+
+---
+
+## ✨ Features
+
+- **Instant or batched delivery** controlled by `BATCH_MAX_SIZE` and `BATCH_MAX_WAIT_TIME`.
+- **Supported channels**  
+  - `EMAIL` – Gmail & Mailgun ready; easy to add Sendgrid, etc.  
+  - `SYSTEM` – stored in PostgreSQL, full CRUD.
+- **JWT security** (access + refresh tokens).
+- **Swagger/OpenAPI** auto-generated (`/api-docs`).
+- **Health checks** (`/health`) out of the box.
+- Async jobs with **BullMQ** on **Redis**.
+- Fully typed TypeScript & DTO ↔ Prisma mapping via AutoMapper.
+
+---
+
+## 🏗️ Architecture
+
+### Big-Picture (C4 – Context Diagram)
+
+
+
+[Client] ⇄ REST ⇄ [NestJS API] │ ┌───────────────┼──────────────────┐ │ │ │ [Auth Module] [Users Module] [Notifications Module] │ ┌──────┴───────┐ │ Domain Logic │ └──────┬───────┘ │ ┌────────────┴────────────┐ │ Prisma ORM | BullMQ │ │ PostgreSQL | Redis │ └─────────────┴───────────┘
+
+
+### DDD / Clean Architecture Layers
+
+| Layer | Directory | Responsibility |
+|-------|-----------|----------------|
+| **Domain** | `domain/` | Entities, VOs, domain services, contracts |
+| **Application** | `application/` | Use-cases, DTOs, orchestration |
+| **Infrastructure** | `infrastructure/` | Persistence, external providers, mappers |
+| **Presentation** | `presentation/` | HTTP controllers, guards, pipes |
+
+---
+
+## 🛠️ Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | – | PostgreSQL connection string |
+| `PORT` | `3000` | HTTP port |
+| `NODE_ENV` | `development` | `development | production | test` |
+| `JWT_SECRET` | – | Key (≥ 32 chars) to sign JWT |
+| `JWT_EXPIRES_IN` | `15m` | Access-token lifespan |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Refresh-token lifespan |
+| `EMAIL_PROVIDER` | `gmail` | `gmail | mailgun` |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | – | Gmail credentials |
+| `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` | – | Mailgun credentials |
+| `BATCH_MAX_SIZE` | `5` | Max similar notifications per batch |
+| `BATCH_MAX_WAIT_TIME` | `7200` | Max wait (seconds) before forcing batch |
+| `REDIS_HOST/PORT/PASSWORD` | `localhost/6379/-` | Redis connection |
+| `RATE_LIMIT_TTL` / `RATE_LIMIT_LIMIT` | `60 / 100` | Global rate-limit |
+| `LOG_LEVEL` | `info` | `debug info warn error` |
+
+Create your local file:
 
 ```bash
-$ npm install
-```
+cp .env.example .env && nano .env
 
-## Compile and run the project
+🖥️ System Requirements
+Node.js ≥ 16
+PostgreSQL ≥ 12 (PostGIS optional)
+Redis ≥ 6 (for BullMQ)
+npm ≥ 8
 
-```bash
-# development
-$ npm run start
+(Optional) Docker & docker-compose to spin up local infra.
 
-# watch mode
-$ npm run start:dev
+🚀 Quick Start
+git clone https://github.com/your-org/notification-service.git
+cd notification-service
+npm install                         # install deps
+cp .env.example .env && nano .env   # add your secrets
+npx prisma migrate dev              # DB migrations
+npx prisma db seed                  # seed data (optional)
+docker compose up -d redis          # start Redis
+npm run start:dev                   # watch mode
+open http://localhost:3000/api-docs
 
-# production mode
-$ npm run start:prod
-```
 
-## Run tests
+Production:
 
-```bash
-# unit tests
-$ npm run test
+npm run build && NODE_ENV=production node dist/main.js
 
-# e2e tests
-$ npm run test:e2e
+🔗 Key Endpoints
+Method	Route	Description
+POST	/auth/login	Get tokens
+POST	/notifications	Create notification
+GET	/notifications/system	List user system notifications
+PATCH	/notifications/system/:id/read|unread	Mark read/unread
+DELETE	/notifications/:id	Delete notification
+GET	/notifications/queue/stats	Bull queue stats
+GET	/health	Global health-check
 
-# test coverage
-$ npm run test:cov
-```
+Full contract in Swagger UI.
 
-## Deployment
+📦 Batch-Processing Flow
+Similarity key = eventName + channel + recipient.
+Every notification is queued as PENDING.
+BullMQ triggers a batch when either:
+Number of similar items ≥ BATCH_MAX_SIZE, or
+First item has waited BATCH_MAX_WAIT_TIME seconds.
+A single aggregated message (HTML for Email, list for System) is sent and traces marked SENT/ERROR.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more user.
+System channel is always processed as instant, regardless of requested type.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+🔌 Adding New Email Providers
+Create my-provider.service.ts implementing EmailProvider (sendEmail(to, subject, body, meta) → { success, error?, id? }).
+Register it in EmailProviderFactory.
+Export it from the providers/ index. No other layers need changes.
+🧪 Testing
+npm run test        # unit
+npm run test:e2e    # end-to-end
+npm run test:cov    # coverage
 
-```bash
-$ npm install -g mau
-$ mau deploy
-```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+External services (SMTP/API) are mocked to keep tests deterministic.
 
-## Resources
+🤝 Contributing
+Open an issue or fork → create a feature branch.
+Follow Conventional Commits.
+Make sure npm run lint && npm run test pass.
+Submit PR – CI (GitHub Actions) runs lint, tests and build.
+📜 License
 
-Check out a few resources that may come in handy when working with NestJS:
+Distributed under the MIT license. See LICENSE for details.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Crafted with ❤️ and ☕ by the your-org team.

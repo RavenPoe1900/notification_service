@@ -1,168 +1,80 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { ConfigService } from '@nestjs/config';
-import {
-  BatchProcessingJobData,
-  NotificationJobData,
-} from '../../domain/types/notification-job-data.types';
-import { OperationResult } from '../../domain/types/notification.types';
-import { NotificationCommonService } from '../../application/services/notification-common.service';
-import { EmailTemplateService } from './email-template.service';
-import { buildBatchContent } from 'src/shared/utils/notification-content.util';
+import type { NotificationJobData, BatchProcessingJobData } from '../../domain/types/notification-job-data.types';
+import { OperationResultDto } from 'src/shared/applications/dtos/operation-result.dto';
 
 @Injectable()
-export class NotificationQueueService {
-  private readonly logger = new Logger(NotificationQueueService.name);
-  private previousMaxWait: number | null = null;
-
+export class NotificationQueueService implements OnModuleInit{
   constructor(
     @InjectQueue('notifications') private readonly queue: Queue,
-    private readonly config: ConfigService,
-    private readonly notificationCommonService: NotificationCommonService,
-    private readonly emailTemplateService: EmailTemplateService,
-  ) {
-    this.scheduleBatchProcessing();
-  }
+  ) {}
 
-  private async scheduleBatchProcessing(): Promise<void> {
-    const maxWait = this.config.get<number>('BATCH_MAX_WAIT_TIME', 7200);
-
-    if (this.previousMaxWait && this.previousMaxWait !== maxWait) {
-      await this.queue.removeRepeatable('scheduled-batch-processing', {
-        every: this.previousMaxWait * 1000,
-      });
-    }
-
-    await this.queue.add(
-      'scheduled-batch-processing',
-      {},
-      {
-        repeat: { every: maxWait * 1000 },
-        removeOnComplete: true,
-        removeOnFail: true,
-      },
-    );
-
-    this.previousMaxWait = maxWait;
-    this.logger.log(
-      `Scheduled recurring job to process batch notifications every ${maxWait}s`,
-    );
-  }
-
-  async addInstantNotification(data: NotificationJobData): Promise<string> {
-    const job = await this.queue.add('instant-notification', data, {
+  async addInstantNotification(jobData: NotificationJobData) {
+    await this.queue.add('instant-notification', jobData, {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: 100,
-      removeOnFail: 50,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+      priority: 3,
     });
-    this.logger.log(`Instant notification queued: ${job.id}`);
-    return job.id as string;
   }
 
   async addBatchNotification(
-    data: NotificationJobData,
+    jobData: NotificationJobData,
     batchKey: string,
-    recipient: string,
-  ): Promise<{ jobId: string; scheduledJobId?: string }> {
-    const batchSize = this.config.get<number>('BATCH_MAX_SIZE', 5);
-    const maxWait = this.config.get<number>('BATCH_MAX_WAIT_TIME', 7200);
+    recipient: string
+  ) {
+    const payload: BatchProcessingJobData = {
+      batchKey,
+      jobData: jobData,
+      recipient,
+      content: '',
+      keyProcessor: '',
+    };
 
-    const existing = await this.notificationCommonService.findByBatchKey(batchKey);
-    const scheduled: { jobId?: string } = {};
+    await this.queue.add('scheduled-batch', payload, {
+      delay: 0,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+      priority: 4,
+    });
+  }
 
-    // Primera notificación → programar timeout
-    if (!existing.length) {
-      const timeoutJob = await this.queue.add(
-        'scheduled-batch',
-        { batchKey, channel: data.channel, eventName: data.eventName, recipient } as BatchProcessingJobData,
-        {
-          delay: maxWait * 1000,
-          attempts: 1,
-          removeOnComplete: 50,
-          removeOnFail: 25,
+  async onModuleInit() {
+    await this.queue.add(
+      'process-pending-batches',
+      {},
+      {
+        repeat: {
+          every: parseInt(process.env.BATCH_MAX_WAIT_TIME) * 60000,
         },
-      );
-      scheduled.jobId = timeoutJob.id as string;
-      this.logger.log(`Scheduled batch ${batchKey} in ${maxWait}s`);
-    }
-
-    // Si alcanzó tamaño máximo
-    if (existing.length + 1 >= batchSize) {
-      const notificationsToCombine = [...existing, data];
-
-      let htmlCombined: string;
-      if (data.channel === 'EMAIL') {
-        htmlCombined = this.emailTemplateService.generateBatchEmailTemplate({
-          notificationCount: notificationsToCombine.length,
-          notifications: notificationsToCombine.map((n, i) => ({
-            subject: n.emailData?.subject ?? 'No subject',
-            body: n.emailData?.body ?? '',
-            index: i,
-          })),
-        });
-      } else {
-        htmlCombined = buildBatchContent(notificationsToCombine);
-      }
-
-      const batchJob = await this.queue.add(
-        'batch-notification',
-        {
-          batchKey,
-          channel: data.channel,
-          eventName: data.eventName,
-          recipient,
-          content: htmlCombined,
-        } as BatchProcessingJobData,
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        },
-      );
-      this.logger.log(
-        `Batch ${batchKey} launched (size limit) – job ${batchJob.id}`,
-      );
-      return { jobId: batchJob.id as string, scheduledJobId: scheduled.jobId };
-    }
-
-    // Todavía en espera
-    return { jobId: 'pending', scheduledJobId: scheduled.jobId };
+        jobId: 'recurring-batch-processor',
+        priority: 2,
+      },
+    );
   }
 
   async getQueueStats() {
-    const [waiting, active, completed, failed] = await Promise.all([
-      this.queue.getWaiting(),
-      this.queue.getActive(),
-      this.queue.getCompleted(),
-      this.queue.getFailed(),
-    ]);
-    return {
-      waiting: waiting.length,
-      active: active.length,
-      completed: completed.length,
-      failed: failed.length,
-    };
+    return this.queue.getJobCounts();
   }
 
-  async cleanQueue(): Promise<OperationResult> {
-    await this.queue.clean(24 * 60 * 60 * 1000, 'completed' as any);
-    await this.queue.clean(24 * 60 * 60 * 1000, 'failed' as any);
-    this.logger.log('Queue cleaned');
-    return { success: true, message: 'Queue cleaned successfully' };
+  // FIX: devolver OperationResultDto para que el controller compile
+  async cleanQueue(): Promise<OperationResultDto> {
+    await this.queue.clean(1000, 100, 'completed');
+    await this.queue.clean(1000, 100, 'failed');
+    return { success: true, message: 'Queue cleaned' };
   }
 
-  async pauseQueue(): Promise<OperationResult> {
+  async pauseQueue(): Promise<OperationResultDto> {
     await this.queue.pause();
-    this.logger.log('Queue paused');
-    return { success: true, message: 'Queue paused successfully' };
+    return { success: true, message: 'Queue paused' };
   }
 
-  async resumeQueue(): Promise<OperationResult> {
+  async resumeQueue(): Promise<OperationResultDto> {
     await this.queue.resume();
-    this.logger.log('Queue resumed');
-    return { success: true, message: 'Queue resumed successfully' };
+    return { success: true, message: 'Queue resumed' };
   }
 }

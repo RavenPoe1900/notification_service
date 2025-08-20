@@ -1,6 +1,8 @@
+import type { Notification } from '../../domain/types/notification.types';
+
 export interface EmailProvider {
   sendEmail(to: string, subject: string, body: string, meta?: any): Promise<EmailResult>;
-  sendBatchEmail(emails: EmailData[]): Promise<EmailResult[]>;
+  sendBatchEmail(emails: Notification[]): Promise<EmailResult[]>;
   testConnection(): Promise<boolean>;
 }
 

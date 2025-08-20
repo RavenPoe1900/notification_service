@@ -6,6 +6,7 @@ import { AuthController } from './presentation/controller/auth.controller';
 import { AuthService } from './application/services/auth.service';
 import { RefreshTokenService } from './application/services/refresh-token.service';
 import { BcryptHasherService } from 'src/shared/applications/security/bcrypt.service';
+import { TokenCleanupProcessor } from './insfractuture/token-cleanup.processor';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { BcryptHasherService } from 'src/shared/applications/security/bcrypt.ser
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, RefreshTokenService, BcryptHasherService],
+  providers: [AuthService, RefreshTokenService, BcryptHasherService, TokenCleanupProcessor],
   controllers: [AuthController],
   exports: [AuthService],
 })
