@@ -44,15 +44,35 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
   }
 
   private async processPendingBatches(job: Job<BatchProcessingJobData>): Promise<void> {
-    const getAllQueueJobData: Record<string, QueueJobData> = await this.getAllQueueJobData();
-    for (const key in getAllQueueJobData) {
-      job.data.keyProcessor = getAllQueueJobData[key].keyProcessor;
-      job.data.batchKey = getAllQueueJobData[key].batchKey;
-      job.data.recipient = getAllQueueJobData[key].recipient;
-      await this.queue.add('batch-notification', job.data, { priority: 1 });
+    const globalLockKey = 'lock:processPendingBatches';
+    const lockAcquired = await this.redisClient.set(globalLockKey, '1', 'EX', 30, 'NX');
+    
+    if (!lockAcquired) {
+      this.logger.warn('Process pending batches already running, skipping');
+      return;
+    }
+    
+    try {
+      const getAllQueueJobData: Record<string, QueueJobData> = await this.getAllQueueJobData();
+      const batchPromises = Object.keys(getAllQueueJobData).map(async (key) => {
+        const queueData = getAllQueueJobData[key];
+        const newKey = queueData.keyProcessor + "processPendingBatches";
+        
+        const batchJobData: BatchProcessingJobData = {
+          ...job.data,
+          keyProcessor: newKey,
+          batchKey: queueData.batchKey,
+          recipient: queueData.recipient
+        };
+        
+        await this.renameKeyToFinished(queueData.keyProcessor, newKey);
+        return this.queue.add('batch-notification', batchJobData, { priority: 1 });
+      });
+      await Promise.all(batchPromises);
+    } finally {
+      await this.redisClient.del(globalLockKey);
     }
   }
-
 
   private async handleInstant(job: Job<NotificationJobData>): Promise<void> {
     const { notificationId, channel, emailData } = job.data;
@@ -120,33 +140,57 @@ export class NotificationProcessor extends WorkerHost implements OnModuleInit{
     this.logger.log(`Timed batch triggered for ${batchKey}`);
 
     const key: string = this.makeUniqueKey(jobData.eventName, jobData.channel, jobData.emailData.to);
-    let queueJobData: QueueJobData | null = await this.getKeyValue(key);
-    if(!queueJobData) {
-      queueJobData ={
-        recipient: recipient,
-        batchKey: batchKey,
-        keyProcessor: key,
-        subject: [jobData.emailData?.subject ?? 'No subject'],
-        body: [jobData.emailData?.body ?? jobData.systemData?.content ?? ''],
-        notificationIds:[jobData.notificationId],
-        count: 1
-      }
-      await this.setKeyValue(key,queueJobData);
+    
+    const lockKey = `lock:${key}`;
+    const lockAcquired = await this.redisClient.set(lockKey, '1', 'EX', 10, 'NX');
+    
+    if (!lockAcquired) {
+      this.logger.warn(`Could not acquire lock for ${key}, retrying later`);
+      throw new Error('Retry later');
     }
-    else {
-      const numericValue = Number(queueJobData.count);
-      queueJobData.subject.push(jobData.emailData?.subject ?? 'No subject');
-      queueJobData.body.push(jobData.emailData?.body ?? jobData.systemData?.content ?? '');
-      queueJobData.notificationIds.push(jobData.notificationId);
-      queueJobData.count = queueJobData.count+1
-      if(numericValue < Number(process.env.BATCH_MAX_SIZE)){
+    
+    try {
+      let queueJobData: QueueJobData | null = await this.getKeyValue(key);
+      if(!queueJobData) {
+        queueJobData ={
+          recipient: recipient,
+          batchKey: batchKey,
+          keyProcessor: key,
+          subject: [jobData.emailData?.subject ?? 'No subject'],
+          body: [jobData.emailData?.body ?? jobData.systemData?.content ?? ''],
+          notificationIds:[jobData.notificationId],
+          count: 1
+        }
         await this.setKeyValue(key,queueJobData);
-      } 
-      else{
-        job.data.keyProcessor = key;
-        await this.queue.add('batch-notification', job.data, { priority: 1 });
-      }}
-      console.log(queueJobData.count)
+      }
+      else {
+        const numericValue = Number(queueJobData.count);
+        queueJobData.subject.push(jobData.emailData?.subject ?? 'No subject');
+        queueJobData.body.push(jobData.emailData?.body ?? jobData.systemData?.content ?? '');
+        queueJobData.notificationIds.push(jobData.notificationId);
+        queueJobData.count = queueJobData.count+1
+        if(numericValue < Number(process.env.BATCH_MAX_SIZE)){
+          await this.setKeyValue(key,queueJobData);
+        } 
+        else{
+          const newKey = key + "handleScheduled";
+          job.data.keyProcessor = newKey;
+          await this.renameKeyToFinished(key, newKey);
+          await this.queue.add('batch-notification', job.data, { priority: 1 });
+        }
+      }
+    } finally {
+      await this.redisClient.del(lockKey);
+    }
+  }
+
+  async renameKeyToFinished(key: string, finishedKey: string): Promise<void> {
+    const value = await this.redisClient.get(key);
+    
+    if (value) {
+      await this.redisClient.set(finishedKey, value);
+      await this.redisClient.del(key);
+    }
   }
 
   makeUniqueKey(eventName: string, channel: string, email: string): string {
